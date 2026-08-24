@@ -34,6 +34,7 @@ let status: PointsStatus = 'loading'
 let balanceValue = 0
 let claims = new Set<string>()
 let questsAtStart: Record<string, number> = {}
+let admin = true
 /** Set once the first ledger arrives, so quest progress is seeded only once. */
 let seeded = false
 

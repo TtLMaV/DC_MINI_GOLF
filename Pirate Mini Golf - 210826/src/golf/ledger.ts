@@ -200,6 +200,7 @@ function sendLedger(address: string, wallet: Wallet): void {
  * Starts the ledger. Called from main() only when running on the server.
  */
 export function runLedger(): void {
+
   engine.addSystem(flushSystem)
 
   room.onMessage('hello', async (_data, context) => {

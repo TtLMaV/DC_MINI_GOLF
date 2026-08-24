@@ -10,6 +10,7 @@ export enum EntityNames {
   Barrel_glb = "Barrel.glb",
   Clubs_glb = "Clubs.glb",
   Decking_glb = "Decking.glb",
+  Environ = "Environ",
   Hole_1_Base_glb = "Hole 1 Base.glb",
   Hole_1_Flag_Pole_glb = "Hole 1 Flag Pole.glb",
   Hole_1_Trim_glb = "Hole 1 Trim.glb",
@@ -43,7 +44,6 @@ export enum EntityNames {
   Moving_Ramp_glb = "Moving Ramp.glb",
   Ocean_V2_glb = "Ocean V2.glb",
   Palm_Trees_glb = "Palm Trees.glb",
-  Pirate_Ship_glb = "Pirate Ship.glb",
   Practice_Hole_Base_glb = "Practice Hole Base.glb",
   Practice_Hole_Trim_glb = "Practice Hole Trim.glb",
   Rocks_glb = "Rocks.glb",
@@ -55,4 +55,5 @@ export enum EntityNames {
   Treasure_Chest_glb = "Treasure Chest.glb",
   Wheel_glb = "Wheel.glb",
   ball = "ball",
+  boat_glb = "boat.glb",
 } 

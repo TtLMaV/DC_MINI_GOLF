@@ -17,6 +17,7 @@ import * as CANNON from 'cannon-es'
 import { courseData } from './collisionData/course_collision'
 import { barrelData } from './collisionData/barrel_collision'
 import { wheelData } from './collisionData/wheel_collision'
+import { boatData } from './collisionData/boat_collision'
 import { rampData } from './collisionData/ramp_collision'
 import { practiceData } from './collisionData/practice_collision'
 
@@ -28,11 +29,12 @@ import { setupSfx } from './golf/sfx'
 import { setBallSkin } from './golf/ball'
 import { setupNet } from './golf/net'
 import { setupPoints } from './golf/points'
-import { onEquipChanged } from './golf/shop'
+import { onEquipChanged, CATALOGUE } from './golf/shop'
 import { setClubModel } from './golf/club'
 import { runLedger } from './golf/ledger'
 import { seedQuests } from './golf/quests'
 import { createNpc } from './golf/npc'
+import { room } from './golf/room'
 import { POINTS, QUARTERMASTER, SHOPKEEPER } from './golf/config'
 import { quartermasterDialog } from './golf/quartermaster'
 import { shopkeeperDialog } from './golf/shopkeeper'
@@ -45,8 +47,10 @@ import { setupWater } from './golf/water'
 // Tunables
 // ---------------------------------------------------------------------------
 const BALL_RADIUS = 0.1
-const MAX_POWER = 25 // impulse magnitude at full charge
+const MAX_POWER = 12 // impulse magnitude at full charge
 const REST_SPEED = 0.15 // below this speed the ball counts as "stopped"
+const LINDAMP = 0.4 // rolling resistances so the ball settles
+const ANGDAMP = 0.4 // rolling resistances so the ball settles
 
 // cannon-es has no built-in CCD, so a fast ball is only as good as how finely
 // we step the simulation. A smaller fixed step (with a matching higher
@@ -60,7 +64,7 @@ const MAX_SUBSTEPS = 20
 // strike and LAUNCH_SPEED below is bounded by it. Still inside the safe range
 // for the trimesh: at 11.2 m/s a 1/120s step moves the ball 9.3cm against a
 // 10cm radius, so it never steps clean through a wall between collision checks.
-const MAX_BALL_SPEED = 11.2
+const MAX_BALL_SPEED = 12
 
 /**
  * Launch speed at full charge.
@@ -82,10 +86,9 @@ const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) })
 
 const groundMat = new CANNON.Material('ground')
 const ballMat = new CANNON.Material('ball')
-// The moving ramp gets its own material so it can be made far less bouncy than
-// the course. A lift the ball has to settle on wants to absorb impacts, not
-// return them — at the course's 0.45 restitution the ball kicks off its edges.
 const rampMat = new CANNON.Material('ramp')
+
+// Add Material To Fround and ball
 world.addContactMaterial(
   new CANNON.ContactMaterial(groundMat, ballMat, {
     friction: 0.0,
@@ -121,6 +124,13 @@ let ballStart = new CANNON.Vec3(0, BALL_RADIUS, 0)
 let barrelBody: CANNON.Body | undefined
 let wheelBody: CANNON.Body | undefined
 let rampBody: CANNON.Body | undefined
+let boatBody: CANNON.Body | undefined
+
+// Variables For Movement
+let movePhase: number = 0
+let timePhase: number = 14
+let boatMoveAmount: Vector3 = Vector3.create(0, 0, 3)
+let boatStartPos: Vector3
 
 /** Build static bodies from every entity named col_* and grab the ball. */
 function buildWorldFromScene() {
@@ -200,6 +210,16 @@ function buildWorldFromScene() {
   wheelBody.position.set(5.26, 0.25, 72.24)
   world.addBody(wheelBody)
 
+    boatBody = new CANNON.Body({
+    mass: 0, // Static environment
+    type: CANNON.Body.STATIC,
+    shape: new CANNON.Trimesh(boatData.vertices, boatData.indices),
+    material: groundMat
+  })
+  boatBody.position.set(15.06, 0.50, 44.5)
+  boatStartPos = boatBody.position
+  world.addBody(boatBody)
+
   // Hole 9's moving ramp. KINEMATIC rather than STATIC: a kinematic body can
   // carry a velocity, so the ball is lifted by a surface that is moving rather
   // than repeatedly teleported into, which is what makes it ride up cleanly.
@@ -225,8 +245,8 @@ function buildWorldFromScene() {
       material: ballMat,
       shape: new CANNON.Sphere(BALL_RADIUS),
       position: ballStart.clone(),
-      linearDamping: 0.5, // rolling resistance so the ball settles
-      angularDamping: 0.8,
+      linearDamping: LINDAMP,
+      angularDamping: ANGDAMP,
       collisionFilterGroup: GROUP_BALL
     })
     ballBody.allowSleep = true
@@ -348,6 +368,25 @@ function UpdateObstacles(dt: number) {
     if (wheelBody) {
       let r = wheelMut.rotation
       wheelBody.quaternion = new CANNON.Quaternion(r.x, r.y, r.z, r.w)
+    }
+  }
+
+  // 
+  movePhase += dt
+  movePhase = movePhase % timePhase
+  let curPhase = Math.sin(2 * Math.PI * movePhase / timePhase)
+
+  const boatFound = engine.getEntityOrNullByName('boat.glb')
+  if (boatFound !== null && Transform.has(boatFound)) {
+    // Get the mutable transform typed as TransformType
+    const boatMut: TransformType = Transform.getMutable(boatFound)
+    boatMut.parent = undefined
+    boatMut.position = Vector3.add(boatStartPos, (Vector3.scale(boatMoveAmount, curPhase)))
+    // boat Update Physics
+    if(boatBody)
+    {
+      let p = boatMut.position
+      boatBody.position = new CANNON.Vec3(p.x, p.y, p.z)
     }
   }
 }
@@ -482,9 +521,10 @@ export function main() {
   // there would be a full golf simulation nobody is watching.
   if (isServer()) {
     runLedger()
+    //console.log("ledger system running")
     return
-  }
-
+  } else {/*console.log("ledger system unable to start")*/}
+  
   buildWorldFromScene()
   paintBall()
   setupSky()
@@ -525,6 +565,9 @@ export function main() {
   )
 
   game.start()
+
+  // Admin Testing, Please remember to get rid of this...
+
 
   // Added after the physics systems so the game always reads a settled pose.
   engine.addSystem((dt: number) => game.update(dt))
