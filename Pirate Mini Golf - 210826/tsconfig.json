@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    // cannon-es's .d.ts references HTMLImageElement, which does not exist in the
+    // Decentraland type environment. Nothing in the scene uses that method, so
+    // the declaration file is simply not type-checked.
+    "skipLibCheck": true,
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@dcl/asset-packs/*": ["node_modules/@dcl/inspector/node_modules/@dcl/asset-packs/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "assets/**/*.ts",
+    "assets/**/*.tsx",
+    "src", "node_modules/cannon-es/dist/cannon-es.d.ts"
+  ],
+  "extends": "@dcl/sdk/types/tsconfig.ecs7.json"
+}
