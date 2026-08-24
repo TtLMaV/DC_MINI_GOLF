@@ -46,6 +46,16 @@ export type Physics = {
   predictRoll(power: number): number
 }
 
+type ballStats = {
+  ballpowerMod: number
+  ballAngleMod: number
+}
+
+export let curball: ballStats = {
+  ballAngleMod: 0,
+  ballpowerMod: 0.7
+}
+
 export type Phase =
   | 'walking' // too far from the ball to play
   | 'ready' // in range, waiting to address
@@ -713,15 +723,16 @@ export class Game {
       this.release()
     }
   }
-
+  
   private release(): void {
     const ball = this.physics.position()
-    const power = this.swing.power
+    const power = this.swing.power * curball.ballpowerMod
 
     // A missed impact click bends the shot off the aim line. This is the only
     // thing that makes the meter a skill rather than a formality.
     const aim = this.aimVector()
-    const bend = (deviationDegrees(this.swing) * Math.PI) / 180
+    const bend = (1 - curball.ballAngleMod) * (deviationDegrees(this.swing) * Math.PI) / 180
+    //console.log(bend)
     const cos = Math.cos(bend)
     const sin = Math.sin(bend)
     const dirX = aim.x * cos + aim.z * sin

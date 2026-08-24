@@ -12,6 +12,7 @@ import { Color4, Vector3, Quaternion } from '@dcl/sdk/math'
 // IMPORTANT: absolute path import — the bare "cannon-es" specifier does NOT
 // resolve inside the SDK bundler. Also add this path to tsconfig "include".
 import { isServer } from '@dcl/sdk/network'
+import { isMobile, getPlatform } from '@dcl/sdk/platform'
 
 import * as CANNON from 'cannon-es'
 import { courseData } from './collisionData/course_collision'
@@ -22,19 +23,18 @@ import { rampData } from './collisionData/ramp_collision'
 import { practiceData } from './collisionData/practice_collision'
 
 import { AIM } from './golf/config'
-import { Game, Physics } from './golf/game'
+import { Game, Physics, curball } from './golf/game'
 import { setupHud } from './golf/hud'
 import { setupMusic } from './golf/music'
 import { setupSfx } from './golf/sfx'
-import { setBallSkin } from './golf/ball'
+import { setBallModel, MakeBallGLTF } from './golf/ball'
 import { setupNet } from './golf/net'
 import { setupPoints } from './golf/points'
-import { onEquipChanged, CATALOGUE } from './golf/shop'
+import { DEFAULTS, onEquipChanged } from './golf/shop'
 import { setClubModel } from './golf/club'
 import { runLedger } from './golf/ledger'
 import { seedQuests } from './golf/quests'
 import { createNpc } from './golf/npc'
-import { room } from './golf/room'
 import { POINTS, QUARTERMASTER, SHOPKEEPER } from './golf/config'
 import { quartermasterDialog } from './golf/quartermaster'
 import { shopkeeperDialog } from './golf/shopkeeper'
@@ -197,7 +197,7 @@ function buildWorldFromScene() {
     material: groundMat,
     collisionFilterGroup: GROUP_COURSE
   })
-  barrelBody.position.set(36, 2.91, 41.53)
+  barrelBody.position.set(36, 2.85, 41.6)
   world.addBody(barrelBody)
 
   wheelBody = new CANNON.Body({
@@ -256,6 +256,8 @@ function buildWorldFromScene() {
   }
 }
 
+
+
 /**
  * Paints the ball.
  *
@@ -266,7 +268,10 @@ function buildWorldFromScene() {
  * importing this module, which would be circular.
  */
 function paintBall(): void {
-  setBallSkin('white')
+    // The catalogue's id, not a loose string. This said 'white' and the shop
+    // renamed it 'ball-white' underneath it, so setBallSkin found nothing, gave
+    // up, and the ball went unpainted from the moment the shop landed.
+    //setBallColor(DEFAULTS.ball)
 }
 
 export function debugShowPhysBB(body: CANNON.Body): Entity {
@@ -391,11 +396,25 @@ function UpdateObstacles(dt: number) {
   }
 }
 
+function onMobile(): boolean {
+  try {
+    return typeof isMobile === 'function' ? (isMobile as () => boolean)() : !!isMobile
+  } catch {
+    return false
+  }
+}
+
+function HalfOnMobile(number2Half: number): number {
+  return onMobile()
+    ? number2Half / 2 // MOBILE — increase these if still too small
+    : number2Half // DESKTOP — your original
+}
+
 /** Step physics and copy the body pose onto the authored ball entity. */
 function physicsSystem(dt: number) {
   if (!ballBody || !ballEntity) return
 
-  world.step(FIXED_TIME_STEP, dt, MAX_SUBSTEPS) // finer fixed timestep -> less penetration variance per collision check
+  world.step(HalfOnMobile(FIXED_TIME_STEP), dt, HalfOnMobile(MAX_SUBSTEPS)) // finer fixed timestep -> less penetration variance per collision check
   clampBallSpeed() // catch speed gained from steep ramps too, not just strikes
 
   const t = Transform.getMutable(ballEntity)
@@ -527,6 +546,7 @@ export function main() {
   
   buildWorldFromScene()
   paintBall()
+  MakeBallGLTF()
   setupSky()
   setupWater()
   setupRamp()
@@ -553,8 +573,20 @@ export function main() {
   // Whatever the server says they are holding, they hold. Fires on arrival and
   // again the moment a purchase lands.
   onEquipChanged((item) => {
-    if (item.kind === 'ball') setBallSkin(item.id)
-    else if (item.model) setClubModel(game.club, item.model)
+    if (item.kind === 'ball') {
+      if (item.model) setBallModel(item.id, item.model)
+    }
+    if (item.kind === 'club') {
+      if(ballBody)
+      {
+        ballBody.linearDamping = item.Damping ? item.Damping : 0.5
+        ballBody.angularDamping = item.Damping ? item.Damping : 0.5
+      }
+      curball.ballpowerMod = item.power ? item.power : 1
+      curball.ballAngleMod = item.forgiveness ? item.forgiveness : 0
+
+      if (item.model) setClubModel(game.club, item.model)
+    }
   })
 
   setupPoints(

@@ -34,7 +34,6 @@ let status: PointsStatus = 'loading'
 let balanceValue = 0
 let claims = new Set<string>()
 let questsAtStart: Record<string, number> = {}
-let admin = true
 /** Set once the first ledger arrives, so quest progress is seeded only once. */
 let seeded = false
 
@@ -197,6 +196,11 @@ export function claimOnce(key: string): void {
 
 export function claimSecretHole(): void {
   claimOnce('secret')
+}
+
+/** Asks the server for testing points. Refused unless the wallet is allow-listed. */
+export function grantPoints(amount: number): void {
+  void room.send('grant', { amount })
 }
 
 /** Tells the server where a quest has got to. */

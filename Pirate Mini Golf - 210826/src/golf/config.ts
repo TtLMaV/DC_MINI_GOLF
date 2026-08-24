@@ -107,7 +107,7 @@ export const CLUB = {
    * and the club stands straight up out of the fist. y spins the head around
    * the shaft — flip to -90 if the face ends up pointing the wrong way.
    */
-  gripOffset: { x: 0.02, y: -0.02, z: 0.06 },
+  gripOffset: { x: 0.02, y: 0.0, z: 0.0 },
   gripRotation: { x: 180, y: 180, z: 0 },
   scale: 1,
 
@@ -209,6 +209,24 @@ export const POINTS = {
   short: 'PP',
 
   /**
+   * Let a guest earn, buy and complete quests.
+   *
+   * Off in the normal course of things: a guest address is not stable between
+   * visits, so anything stored against one is lost, and paying somebody in
+   * something they cannot keep is worse than not paying them.
+   *
+   * On for testing. A preview usually runs as a guest unless a wallet has been
+   * linked, and with this off a second developer sees the shop and the quest
+   * but cannot make either of them do anything — which reads as broken rather
+   * than as policy. Turn it on to exercise the whole loop, and off again
+   * before a public deploy.
+   *
+   * The HUD still stars the balance either way, because it is still not
+   * durable — this changes who may earn, not who may keep.
+   */
+  allowGuests: false,
+
+  /**
    * What a round pays.
    *
    * The floor is deliberately "you finished" rather than "you were good": a
@@ -291,7 +309,24 @@ export const ADMIN = {
    * panel skips straight to any hole, so an open one is a free scorecard.
    * Addresses are compared lower-case.
    */
-  allow: [] as string[]
+  allow: [] as string[],
+
+  /**
+   * Everything in the shop counts as owned.
+   *
+   * For testing the clubs and balls without the currency in the way. It is not
+   * a shortcut round the shop — the item is genuinely owned, so equipping it
+   * runs the ordinary path: the server records what you are holding, answers
+   * with the inventory, and the club model and ball colour change off the back
+   * of that, exactly as they would after a real purchase. The only thing
+   * skipped is paying.
+   *
+   * You can tell it is on by looking at the inventory: everything reads EQUIP
+   * rather than a price.
+   *
+   * Set false before a public deploy or the shop is a giveaway.
+   */
+  freeStock: true
 }
 
 export const RAMP = {

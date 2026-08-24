@@ -52,6 +52,16 @@ export const MESSAGES = {
   /** Client -> server: hold something already owned. */
   equip: Schemas.Map({ id: Schemas.String }),
 
+  /**
+   * Client -> server: put points in my pocket, for testing.
+   *
+   * Refused unless the asking wallet is named in ADMIN.allow. The test panel
+   * opens for anybody while ADMIN.allow is empty, which is right for building
+   * — but minting currency is a different thing from jumping to a hole, so it
+   * takes naming yourself explicitly and never works by default.
+   */
+  grant: Schemas.Map({ amount: Schemas.Int }),
+
   /** Server -> one client: a purchase that could not go through, and why. */
   refused: Schemas.Map({ reason: Schemas.String }),
 

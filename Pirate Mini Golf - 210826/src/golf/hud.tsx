@@ -1,14 +1,29 @@
 import { getExplorerInformation } from '~system/Runtime'
 
 import { Color4 } from '@dcl/sdk/math'
-import ReactEcs, { Label, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
+import ReactEcs, { Label, PositionUnit, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
 import { POINTS, SWING } from './config'
 import { HOLES, SECRET, TOTAL_PAR } from './course'
 import { Game } from './game'
 import { myUserId, roster } from './net'
 import { choose, currentNode, nodeChoices, nodeText, speakerName } from './npc'
-import { balance, pointsAreLocal, pointsStatus, pointsVisible } from './points'
+import { balance, grantPoints, pointsAreLocal, pointsStatus, pointsVisible } from './points'
 import { trackedQuests } from './quests'
+import {
+  BAD,
+  CREAM,
+  DIM,
+  GOLD,
+  GOOD,
+  INK,
+  INK_SOFT,
+  PICKED,
+  SHADOW,
+  button,
+  chip,
+  face,
+  panel
+} from './theme'
 import {
   Item,
   ItemKind,
@@ -60,19 +75,6 @@ const SAFE = {
   toastTop: '24%'
 } as const
 
-const INK = Color4.create(0.05, 0.07, 0.1, 0.85)
-const INK_SOFT = Color4.create(0.05, 0.07, 0.1, 0.6)
-const TRACK = Color4.create(0, 0, 0, 0.7)
-const CLEAR = Color4.create(0, 0, 0, 0)
-const GOLD = Color4.create(0.95, 0.78, 0.33, 1)
-const CREAM = Color4.create(0.97, 0.96, 0.92, 1)
-const DIM = Color4.create(0.7, 0.73, 0.78, 1)
-const GOOD = Color4.create(0.42, 0.88, 0.5, 1)
-const BAD = Color4.create(0.96, 0.44, 0.4, 1)
-const BAND_GOOD = Color4.create(0.42, 0.88, 0.5, 0.35)
-const BAND_PERFECT = Color4.create(0.55, 1, 0.6, 0.75)
-const IMPACT = Color4.create(1, 1, 1, 0.95)
-const LOCK = Color4.create(0.98, 0.85, 0.4, 1)
 
 let game: Game
 
@@ -90,29 +92,23 @@ function pointsChip() {
   return (
     <UiEntity
       uiTransform={{
-        width: 176,
+        width: 128,
         height: 62,
         margin: { left: 10 },
         flexDirection: 'row',
         alignItems: 'center',
-        padding: { left: 14, right: 14 }
+        padding: { left: 16, right: 16 }
       }}
-      uiBackground={{ color: INK }}
+      uiBackground={panel()}
     >
       <Label
         value={pointsAreLocal() ? `${POINTS.short}*` : POINTS.short}
         fontSize={16}
         color={DIM}
-        uiTransform={{ width: 44, height: 30 }}
+        uiTransform={{ width: 30, height: 30 }}
         textAlign="middle-left"
       />
-      <Label
-        value={pointsStatus() === 'loading' ? '\u2014' : `${balance()}`}
-        fontSize={24}
-        color={GOLD}
-        uiTransform={{ width: 104, height: 30 }}
-        textAlign="middle-right"
-      />
+      <Bold value={pointsStatus() === 'loading' ? '\u2014' : `${balance()}`} fontSize={24} color={GOLD} outline={SHADOW} spread={1} width={66} height={30} textAlign="middle-right" />
     </UiEntity>
   )
 }
@@ -147,9 +143,9 @@ function questTracker() {
             margin: { bottom: 2 },
             flexDirection: 'row',
             alignItems: 'center',
-            padding: { left: 18, right: 18 }
+            padding: { left: 30, right: 30 }
           }}
-          uiBackground={{ color: INK_SOFT }}
+          uiBackground={chip()}
         >
           <Label
             value={quest.objective}
@@ -205,7 +201,7 @@ function itemRow(item: Item, canAfford: boolean) {
         alignItems: 'center',
         padding: { left: 16, right: 16 }
       }}
-      uiBackground={{ color: worn ? Color4.create(0.95, 0.78, 0.33, 0.16) : INK_SOFT }}
+      uiBackground={button(worn ? PICKED : undefined)}
       onMouseDown={() => (owned ? equip(item.id) : buy(item.id))}
     >
       <UiEntity uiTransform={{ width: 560, height: 52, flexDirection: 'column', justifyContent: 'center' }}>
@@ -240,7 +236,7 @@ function tabButton(kind: ItemKind, label: string) {
   return (
     <UiEntity
       uiTransform={{ width: 150, height: 40, margin: { right: 8 }, alignItems: 'center', justifyContent: 'center' }}
-      uiBackground={{ color: here ? Color4.create(0.95, 0.78, 0.33, 0.22) : INK_SOFT }}
+      uiBackground={button(here ? PICKED : undefined)}
       onMouseDown={() => setShopTab(kind)}
     >
       <Label value={label} fontSize={17} color={here ? GOLD : DIM} uiTransform={{ width: 140, height: 26 }} textAlign="middle-center" />
@@ -271,20 +267,14 @@ function inventory() {
           width: 760,
           height: 96 + stock.length * 68,
           flexDirection: 'column',
-          padding: { top: 16, bottom: 16, left: 18, right: 18 }
+          padding: { top: 22, bottom: 22, left: 26, right: 26 }
         }}
-        uiBackground={{ color: INK }}
+        uiBackground={panel()}
       >
         {/* title row */}
         <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', alignItems: 'center' }}>
-          <Label value="PUTTS 'N' BALLS" fontSize={20} color={GOLD} uiTransform={{ width: 300, height: 30 }} textAlign="middle-left" />
-          <Label
-            value={`${purse}  ${POINTS.short}`}
-            fontSize={20}
-            color={CREAM}
-            uiTransform={{ width: 424, height: 30 }}
-            textAlign="middle-right"
-          />
+          <Bold value="PUTTS 'N' BALLS" fontSize={20} color={GOLD} outline={SHADOW} spread={1} width={300} height={30} textAlign="middle-left" />
+          <Bold value={`${purse}  ${POINTS.short}`} fontSize={20} color={CREAM} outline={SHADOW} spread={1} width={424} height={30} textAlign="middle-right" />
         </UiEntity>
 
         {/* tabs */}
@@ -303,6 +293,85 @@ function inventory() {
         uiTransform={{ width: 760, height: 24 }}
         textAlign="middle-right"
       />
+    </UiEntity>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Bold
+// ---------------------------------------------------------------------------
+
+/**
+ * Text with weight, and optionally an outline.
+ *
+ * The engine gives three fonts and no bold, no weight and no outline — a UI
+ * label has a value, a colour, a size, an alignment and a font, and that is
+ * the whole of it. So both are faked the only way they can be: the same string
+ * is drawn several times, a pixel apart, and the overlap thickens the strokes.
+ * Dark copies first for the outline, then the fill on top.
+ *
+ * It costs an entity per stamp, which is why this is not simply what every
+ * Label does. Worth it on the numbers and headings people read at a glance;
+ * not worth it on a paragraph of dialogue nobody is squinting at.
+ *
+ * The stamps are absolutely positioned, so the container needs an explicit
+ * width and height — Decentraland collapses an absolutely-positioned element
+ * with no height of its own and takes its children with it.
+ */
+function Bold(props: {
+  value: string
+  fontSize: number
+  color: Color4
+  width: PositionUnit
+  height: number
+  textAlign?: 'middle-left' | 'middle-center' | 'middle-right' | 'top-left'
+  font?: 'sans-serif' | 'serif' | 'monospace'
+  /** Draw a dark ring behind it as well. */
+  outline?: Color4
+  /** How far the ring sits out. Scale it with the text or it disappears. */
+  spread?: number
+}) {
+  const align = props.textAlign ?? 'middle-center'
+  const font = props.font ?? 'serif'
+  const spread = props.spread ?? 2
+
+  const stamp = (dx: number, dy: number, color: Color4, key: string) => (
+    <Label
+      key={key}
+      value={props.value}
+      fontSize={props.fontSize}
+      color={color}
+      font={font}
+      textAlign={align}
+      uiTransform={{
+        positionType: 'absolute',
+        position: { left: dx, top: dy },
+        width: props.width,
+        height: props.height
+      }}
+    />
+  )
+
+  const ring: [number, number][] = props.outline
+    ? [
+        [-spread, 0],
+        [spread, 0],
+        [0, -spread],
+        [0, spread],
+        [-spread, -spread],
+        [spread, -spread],
+        [-spread, spread],
+        [spread, spread]
+      ]
+    : []
+
+  return (
+    <UiEntity uiTransform={{ width: props.width, height: props.height }}>
+      {ring.map(([dx, dy], i) => stamp(dx, dy, props.outline!, `o${i}`))}
+      {/* The weight itself: three fills, half a pixel apart in effect. */}
+      {stamp(1, 0, props.color, 'w1')}
+      {stamp(0, 1, props.color, 'w2')}
+      {stamp(0, 0, props.color, 'w0')}
     </UiEntity>
   )
 }
@@ -339,17 +408,11 @@ function dialog() {
           width: 900,
           height: 236,
           flexDirection: 'column',
-          padding: { top: 18, bottom: 18, left: 24, right: 24 }
+          padding: { top: 24, bottom: 24, left: 30, right: 30 }
         }}
-        uiBackground={{ color: INK }}
+        uiBackground={panel()}
       >
-        <Label
-          value={speakerName()}
-          fontSize={20}
-          color={GOLD}
-          uiTransform={{ width: '100%', height: 28 }}
-          textAlign="middle-left"
-        />
+        <Bold value={speakerName()} fontSize={20} color={GOLD} width="100%" height={28} textAlign="middle-left" />
         <Label
           value={nodeText(node)}
           fontSize={18}
@@ -361,7 +424,7 @@ function dialog() {
           <UiEntity
             key={`${i}-${c.label}`}
             uiTransform={{ width: '100%', height: 34, margin: { top: 4 }, justifyContent: 'flex-start', alignItems: 'center' }}
-            uiBackground={{ color: INK_SOFT }}
+            uiBackground={chip()}
             onMouseDown={() => choose(i)}
           >
             <Label
@@ -438,6 +501,20 @@ function prompt(phase: string): string {
 // ---------------------------------------------------------------------------
 // Swing meter
 // ---------------------------------------------------------------------------
+
+/**
+ * Colours the meter owns.
+ *
+ * Kept here rather than in theme.ts because none of them are part of the
+ * skin — they are the grammar of the swing, and a re-skin that changed what
+ * "perfect" looks like would be changing the game rather than the paint.
+ */
+const CLEAR = Color4.create(0, 0, 0, 0)
+const TRACK = Color4.create(0.05, 0.07, 0.1, 0.75)
+const BAND_GOOD = Color4.create(0.42, 0.88, 0.5, 0.35)
+const BAND_PERFECT = Color4.create(0.55, 1, 0.6, 0.75)
+const IMPACT = Color4.create(1, 1, 1, 0.95)
+const LOCK = Color4.create(0.98, 0.85, 0.4, 1)
 
 const METER_W = 1000
 const METER_H = 38
@@ -545,7 +622,16 @@ function meter() {
 // Leaderboard
 // ---------------------------------------------------------------------------
 
-const ROW_H = 26
+/**
+ * The leaderboard reserves room for this many, whoever has turned up.
+ *
+ * Sizing it to the field meant a box round one name at the start of a round
+ * that grew and shoved itself about every time somebody joined or left. A
+ * board that is the same shape all evening is easier to read and easier to
+ * ignore.
+ */
+const BOARD_ROWS = 6
+const ROW_H = 30
 
 /**
  * Live standings, always on. Play is continuous, so this is the results screen
@@ -571,50 +657,70 @@ function leaderboard() {
       uiTransform={{
         positionType: 'absolute',
         position: { top: 138, right: SAFE.edge },
-        width: 300,
-        height: 34 + Math.min(field.length, 8) * ROW_H,
+        width: 360,
+        height: 48 + BOARD_ROWS * ROW_H,
         flexDirection: 'column',
-        padding: { top: 8, bottom: 8, left: 12, right: 12 }
+        padding: { top: 14, bottom: 14, left: 20, right: 20 }
       }}
-      uiBackground={{ color: INK }}
+      uiBackground={panel()}
     >
       <Label
         value={`PLAYING  ${field.length}`}
-        fontSize={13}
+        font="serif"
+        fontSize={15}
         color={GOLD}
-        uiTransform={{ width: '100%', height: 18 }}
+        uiTransform={{ width: '100%', height: 22, margin: { bottom: 2 } }}
         textAlign="middle-left"
       />
-      {field.slice(0, 8).map((p, i) => (
-        <UiEntity key={p.id} uiTransform={{ width: '100%', height: ROW_H, flexDirection: 'row' }}>
+      {field.slice(0, BOARD_ROWS).map((p, i) => (
+        <UiEntity
+          key={p.id}
+          uiTransform={{ width: '100%', height: ROW_H, flexDirection: 'row', alignItems: 'center' }}
+          uiBackground={p.id === meId ? { color: PICKED } : undefined}
+        >
           <Label
             value={`${i + 1}`}
             fontSize={15}
             color={DIM}
-            uiTransform={{ width: 24, height: ROW_H }}
+            uiTransform={{ width: 22, height: ROW_H }}
             textAlign="middle-left"
+          />
+          {/* The player's own avatar. A column of faces reads as people; a
+              column of names reads as a table. */}
+          <UiEntity
+            uiTransform={{ width: 24, height: 24, margin: { right: 8 } }}
+            uiBackground={face(p.id)}
           />
           <Label
             value={p.name.length > 12 ? `${p.name.slice(0, 12)}\u2026` : p.name}
-            fontSize={15}
+            fontSize={16}
             color={p.id === meId ? GOLD : CREAM}
-            uiTransform={{ width: 132, height: ROW_H }}
+            uiTransform={{ width: 140, height: ROW_H }}
             textAlign="middle-left"
           />
           <Label
             value={`H${p.hole}`}
             fontSize={14}
             color={DIM}
-            uiTransform={{ width: 42, height: ROW_H }}
+            uiTransform={{ width: 38, height: ROW_H }}
             textAlign="middle-center"
           />
-          <Label
-            value={p.played === 0 ? '-' : toPar(p.diff)}
-            fontSize={15}
-            color={p.played === 0 ? DIM : p.diff <= 0 ? GOOD : BAD}
-            uiTransform={{ width: 78, height: ROW_H }}
-            textAlign="middle-right"
-          />
+          <UiEntity
+            uiTransform={{ width: 56, height: 24, alignItems: 'center', justifyContent: 'center' }}
+            uiBackground={
+              p.played === 0
+                ? undefined
+                : { color: p.diff <= 0 ? Color4.create(0.42, 0.88, 0.5, 0.18) : Color4.create(0.96, 0.44, 0.4, 0.18) }
+            }
+          >
+            <Label
+              value={p.played === 0 ? '-' : toPar(p.diff)}
+              fontSize={15}
+              color={p.played === 0 ? DIM : p.diff <= 0 ? GOOD : BAD}
+              uiTransform={{ width: 56, height: 24 }}
+              textAlign="middle-center"
+            />
+          </UiEntity>
         </UiEntity>
       ))}
     </UiEntity>
@@ -652,11 +758,11 @@ function adminPanel() {
       <UiEntity
         uiTransform={{
           width: 720,
-          height: 606,
+          height: 800,
           flexDirection: 'column',
-          padding: { top: 20, bottom: 20, left: 24, right: 24 }
+          padding: { top: 26, bottom: 26, left: 30, right: 30 }
         }}
-        uiBackground={{ color: INK }}
+        uiBackground={panel()}
       >
         <UiEntity uiTransform={{ width: '100%', height: 34, flexDirection: 'row' }}>
           <Label
@@ -692,7 +798,7 @@ function adminPanel() {
         >
           <UiEntity
             uiTransform={{ width: 330, height: 38, margin: { right: 12 }, alignItems: 'center', justifyContent: 'center' }}
-            uiBackground={{ color: s.practising && s.freeHole === 'practice' ? Color4.create(0.95, 0.78, 0.33, 0.22) : INK_SOFT }}
+            uiBackground={button(s.practising && s.freeHole === 'practice' ? PICKED : undefined)}
             onMouseDown={() => game.gotoFree('practice')}
           >
             <Label
@@ -705,7 +811,7 @@ function adminPanel() {
           </UiEntity>
           <UiEntity
             uiTransform={{ width: 330, height: 38, alignItems: 'center', justifyContent: 'center' }}
-            uiBackground={{ color: s.practising && s.freeHole === 'secret' ? Color4.create(0.95, 0.78, 0.33, 0.22) : INK_SOFT }}
+            uiBackground={button(s.practising && s.freeHole === 'secret' ? PICKED : undefined)}
             onMouseDown={() => game.gotoFree('secret')}
           >
             <Label
@@ -716,6 +822,67 @@ function adminPanel() {
               textAlign="middle-center"
             />
           </UiEntity>
+        </UiEntity>
+
+        {/* ---- stock ----------------------------------------------------
+            Two columns of everything in the catalogue. Tapping one puts it in
+            your hands on the spot — locally and visually only, so nothing is
+            granted and the server is not told. It is for seeing a club, not
+            for having one.
+
+            The points button is the opposite: it changes a real balance, so it
+            goes through the server and is refused unless the wallet is named
+            in ADMIN.allow. Opening this panel is not enough. ------------- */}
+        <UiEntity uiTransform={{ width: '100%', height: 26, margin: { top: 8 }, flexDirection: 'row' }}>
+          <Label
+            value="STOCK  \u2014  tap to equip"
+            fontSize={14}
+            color={DIM}
+            uiTransform={{ width: 440, height: 22 }}
+            textAlign="middle-left"
+          />
+          <UiEntity
+            uiTransform={{ width: 220, height: 24, alignItems: 'center', justifyContent: 'center' }}
+            uiBackground={button()}
+            onMouseDown={() => grantPoints(1000)}
+          >
+            <Label value={`+1000 ${POINTS.short}`} font="serif" fontSize={14} color={GOLD} uiTransform={{ width: 200, height: 20 }} textAlign="middle-center" />
+          </UiEntity>
+        </UiEntity>
+
+        <UiEntity uiTransform={{ width: '100%', height: 150, flexDirection: 'row' }}>
+          {(['ball', 'club'] as ItemKind[]).map((kind) => (
+            <UiEntity
+              key={`stock-${kind}`}
+              uiTransform={{ width: 330, height: 150, margin: { right: 8 }, flexDirection: 'column' }}
+            >
+              {itemsOfKind(kind).map((item) => {
+                const worn = equippedId(kind) === item.id
+                return (
+                  <UiEntity
+                    key={`admin-${item.id}`}
+                    uiTransform={{
+                      width: '100%',
+                      height: 26,
+                      margin: { bottom: 2 },
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    uiBackground={{ color: worn ? PICKED : INK_SOFT }}
+                    onMouseDown={() => equip(item.id)}
+                  >
+                    <Label
+                      value={item.name}
+                      fontSize={14}
+                      color={worn ? GOLD : CREAM}
+                      uiTransform={{ width: 300, height: 22 }}
+                      textAlign="middle-center"
+                    />
+                  </UiEntity>
+                )
+              })}
+            </UiEntity>
+          ))}
         </UiEntity>
 
         {HOLES.map((h, i) => {
@@ -731,7 +898,7 @@ function adminPanel() {
                 flexDirection: 'row',
                 alignItems: 'center'
               }}
-              uiBackground={{ color: here ? Color4.create(0.95, 0.78, 0.33, 0.22) : INK_SOFT }}
+              uiBackground={button(here ? PICKED : undefined)}
               onMouseDown={() => game.gotoHole(i)}
             >
               <Label
@@ -769,7 +936,7 @@ function adminPanel() {
         <UiEntity uiTransform={{ width: '100%', height: 44, margin: { top: 10 }, flexDirection: 'row' }}>
           <UiEntity
             uiTransform={{ width: 200, height: 40, alignItems: 'center', justifyContent: 'center' }}
-            uiBackground={{ color: INK_SOFT }}
+            uiBackground={chip()}
             onMouseDown={() => game.clearCard()}
           >
             <Label value="CLEAR CARD" fontSize={16} color={CREAM} uiTransform={{ width: 180, height: 28 }} textAlign="middle-center" />
@@ -777,7 +944,7 @@ function adminPanel() {
           <UiEntity uiTransform={{ width: 272, height: 40 }} />
           <UiEntity
             uiTransform={{ width: 200, height: 40, alignItems: 'center', justifyContent: 'center' }}
-            uiBackground={{ color: INK_SOFT }}
+            uiBackground={chip()}
             onMouseDown={() => game.closeAdmin()}
           >
             <Label value="CLOSE" fontSize={16} color={GOLD} uiTransform={{ width: 180, height: 28 }} textAlign="middle-center" />
@@ -823,24 +990,12 @@ const hud = () => {
           height: 62,
           flexDirection: 'row',
           alignItems: 'center',
-          padding: { left: 18, right: 18 }
+          padding: { left: 30, right: 30 }
         }}
-        uiBackground={{ color: INK }}
+        uiBackground={panel()}
       >
-        <Label
-          value={`${hole.number}`}
-          fontSize={30}
-          color={GOLD}
-          uiTransform={{ width: 34, height: 40 }}
-          textAlign="middle-left"
-        />
-        <Label
-          value={hole.name}
-          fontSize={20}
-          color={CREAM}
-          uiTransform={{ width: 210, height: 40 }}
-          textAlign="middle-left"
-        />
+        <Bold value={`${hole.number}`} fontSize={30} color={GOLD} outline={SHADOW} spread={2} width={34} height={40} textAlign="middle-left" />
+        <Bold value={hole.name} fontSize={20} color={CREAM} width={210} height={40} textAlign="middle-left" />
         <Label
           value={`PAR ${hole.par}`}
           fontSize={17}
@@ -848,20 +1003,8 @@ const hud = () => {
           uiTransform={{ width: 90, height: 40 }}
           textAlign="middle-center"
         />
-        <Label
-          value={`${s.strokes + 1}`}
-          fontSize={30}
-          color={s.strokes >= hole.par ? BAD : CREAM}
-          uiTransform={{ width: 46, height: 40 }}
-          textAlign="middle-right"
-        />
-        <Label
-          value={metres(s.distanceToPin)}
-          fontSize={20}
-          color={GOLD}
-          uiTransform={{ width: 84, height: 40 }}
-          textAlign="middle-right"
-        />
+        <Bold value={`${s.strokes + 1}`} fontSize={30} color={s.strokes >= hole.par ? BAD : CREAM} outline={SHADOW} spread={2} width={46} height={40} textAlign="middle-right" />
+        <Bold value={metres(s.distanceToPin)} fontSize={20} color={GOLD} width={84} height={40} textAlign="middle-right" />
       </UiEntity>
       {pointsChip()}
       </UiEntity>
@@ -886,17 +1029,11 @@ const hud = () => {
           height: 62,
           flexDirection: 'row',
           alignItems: 'center',
-          padding: { left: 18, right: 18 }
+          padding: { left: 30, right: 30 }
         }}
-        uiBackground={{ color: INK }}
+        uiBackground={panel()}
       >
-        <Label
-          value="PRACTICE"
-          fontSize={20}
-          color={GOLD}
-          uiTransform={{ width: 128, height: 40 }}
-          textAlign="middle-left"
-        />
+        <Bold value={s.freeHole === 'secret' ? 'SECRET' : 'PRACTICE'} fontSize={20} color={GOLD} outline={SHADOW} spread={1} width={128} height={40} textAlign="middle-left" />
         <Label
           value={
             s.freeHole === 'secret'
@@ -928,12 +1065,12 @@ const hud = () => {
         uiTransform={{
           positionType: 'absolute',
           position: { top: SAFE.edge, right: SAFE.edge },
-          width: 404,
-          height: 92,
+          width: 452,
+          height: 108,
           flexDirection: 'column',
-          padding: { top: 8, bottom: 8, left: 14, right: 14 }
+          padding: { top: 16, bottom: 16, left: 26, right: 26 }
         }}
-        uiBackground={{ color: INK }}
+        uiBackground={panel()}
       >
         <UiEntity uiTransform={{ width: '100%', height: 22, flexDirection: 'row' }}>
           {HOLES.map((h) => (
@@ -956,7 +1093,7 @@ const hud = () => {
               <UiEntity
                 key={`s${h.number}`}
                 uiTransform={{ width: 34, height: 32 }}
-                uiBackground={{ color: h.number === hole.number ? Color4.create(0.95, 0.78, 0.33, 0.2) : CLEAR }}
+                uiBackground={{ color: h.number === hole.number ? PICKED : CLEAR }}
               >
                 <Label
                   value={played ? `${s.card[i]}` : '-'}
@@ -974,8 +1111,8 @@ const hud = () => {
           value={`Par ${TOTAL_PAR}    ${toPar(game.toPar)}`}
           fontSize={14}
           color={game.toPar <= 0 ? GOOD : BAD}
-          uiTransform={{ width: '100%', height: 20 }}
-          textAlign="middle-right"
+          uiTransform={{ width: '100%', height: 22, margin: { top: 2 } }}
+          textAlign="middle-center"
         />
       </UiEntity>
       ) : null}
@@ -991,24 +1128,37 @@ const hud = () => {
             positionType: 'absolute',
             position: { top: SAFE.toastTop },
             width: '100%',
-            height: 120,
+            height: 128,
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center'
           }}
         >
           <UiEntity
-            uiTransform={{ width: 940, height: 96, flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
-            uiBackground={{ color: INK }}
+            uiTransform={{
+              // The frame's border overlaps the box by its own thickness, so a
+              // panel sized to exactly fit its text loses a slice of the last
+              // line under the bottom edge. Padding is not optional on a
+              // framed panel — it is what keeps the content inside the frame.
+              width: 700,
+              height: 108,
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: { top: 16, bottom: 16, left: 20, right: 20 }
+            }}
+            uiBackground={panel()}
           >
-            <Label
+            <Bold
               value={s.toast.title}
-              fontSize={40}
+              fontSize={30}
               color={s.toast.tone === 'good' ? GOLD : s.toast.tone === 'bad' ? BAD : CREAM}
-              uiTransform={{ width: 920, height: 48 }}
-              textAlign="middle-center"
+              outline={SHADOW}
+              spread={2}
+              width={640}
+              height={38}
             />
-            <Label value={s.toast.detail} fontSize={18} color={CREAM} uiTransform={{ width: 920, height: 26 }} textAlign="middle-center" />
+            <Label value={s.toast.detail} fontSize={16} color={DIM} uiTransform={{ width: 640, height: 24 }} textAlign="middle-center" />
           </UiEntity>
         </UiEntity>
       ) : null}
@@ -1030,7 +1180,7 @@ const hud = () => {
         >
           <UiEntity
             uiTransform={{ width: 780, height: 80, flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
-            uiBackground={{ color: INK }}
+            uiBackground={panel()}
           >
             <Label
               value={`ROUND COMPLETE    ${game.playedTotal}  (${toPar(game.toPar)})`}
@@ -1067,16 +1217,10 @@ const hud = () => {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}
-              uiBackground={{ color: INK }}
+              uiBackground={panel()}
               onMouseDown={() => game.resetBall()}
             >
-              <Label
-                value="RESET BALL"
-                fontSize={18}
-                color={GOLD}
-                uiTransform={{ width: 170, height: 28 }}
-                textAlign="middle-center"
-              />
+              <Bold value="RESET BALL" fontSize={18} color={GOLD} outline={SHADOW} spread={1} width={170} height={28} />
             </UiEntity>
           ) : null}
 
@@ -1084,14 +1228,14 @@ const hud = () => {
             meter()
           ) : prompt(s.phase) ? (
             <UiEntity
-              uiTransform={{ width: 620, height: 42, alignItems: 'center', justifyContent: 'center' }}
-              uiBackground={{ color: INK_SOFT }}
+              uiTransform={{ width: 480, height: 46, alignItems: 'center', justifyContent: 'center' }}
+              uiBackground={chip()}
             >
               <Label
                 value={prompt(s.phase)}
                 fontSize={18}
                 color={s.phase === 'address' ? GOLD : CREAM}
-                uiTransform={{ width: 600, height: 28 }}
+                uiTransform={{ width: 430, height: 28 }}
                 textAlign="middle-center"
               />
             </UiEntity>

@@ -98,7 +98,7 @@ export const SECRET: Hole = {
 export const HOLES: Hole[] = [
   {
     number: 1,
-    name: 'The Jetty',
+    name: "The Jetty",
     par: 2,
     tee: v(5.05, 0.2, 14.89),
     cup: { kind: 'cup', centre: v(8.55, 0.2, 10.45), floorY: 0.118 },
@@ -114,56 +114,56 @@ export const HOLES: Hole[] = [
   },
   {
     number: 3,
-    name: 'The Gauntlet',
-    par: 3,
+    name: "Triple Bridge",
+    par: 4,
     tee: v(32.05, 2.0, 16.89),
     cup: { kind: 'cup', centre: v(28.05, 1.0, 16.45), floorY: 0.7 },
     hint: 'Down the slope, then thread the gaps.'
   },
   {
     number: 4,
-    name: 'Broadside',
-    par: 3,
+    name: "The Blockade",
+    par: 4,
     tee: v(32.05, 0.2, 30.49),
     cup: { kind: 'cup', centre: v(26.05, 1.0, 30.05), floorY: 0.7 },
     hint: 'Two open trenches between you and the pin.'
   },
   {
     number: 5,
-    name: 'Barrel Run',
-    par: 4,
+    name: "Barrel Run",
+    par: 3,
     tee: v(37.05, 2.4, 34.61),
     cup: { kind: 'cup', centre: v(33.05, 0.8, 41.55), floorY: 0.5 },
     hint: 'Time the barrel, then stay dry.'
   },
   {
     number: 6,
-    name: 'The Lighthouse',
-    par: 3,
+    name: "The Lighthouse",
+    par: 5,
     tee: v(38.45, 3.2, 57.61),
     cup: { kind: 'cup', centre: v(41.45, 4.52, 62.05), floorY: 4.213 },
     hint: 'Around the light, then up onto the deck.'
   },
   {
     number: 7,
-    name: 'Ship in a Bottle',
-    par: 4,
+    name: "Ship's Passing",
+    par: 6,
     tee: v(10.05, 0.2, 50.89),
     cup: { kind: 'cup', centre: v(10.02, 1.6, 42.45), floorY: 1.3 },
     hint: 'The galleon ferries you across. Wait for your gap.'
   },
   {
     number: 8,
-    name: 'The Long Swell',
-    par: 4,
+    name: "Dead Man's Arch",
+    par: 3,
     tee: v(18.948, 0.4, 25.608),
     cup: { kind: 'cup', centre: v(4.948, 0.4, 26.548), floorY: 0.119 },
     hint: 'Two big rollers. Hit it firm or the hill sends it back.'
   },
   {
     number: 9,
-    name: "Davy Jones' Locker",
-    par: 6,
+    name: "Treasure Run",
+    par: 8,
     tee: v(4.749, 2.0, 59.81),
     cup: {
       kind: 'volume',

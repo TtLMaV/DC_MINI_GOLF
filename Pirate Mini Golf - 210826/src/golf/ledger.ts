@@ -1,11 +1,11 @@
 import { engine } from '@dcl/sdk/ecs'
 import { Storage } from '@dcl/sdk/server'
 
-import { POINTS } from './config'
+import { ADMIN, POINTS } from './config'
 import { HOLES } from './course'
 import { room } from './room'
 import { QUESTS } from './quests'
-import { DEFAULTS, itemById } from './shop'
+import { CATALOGUE, DEFAULTS, itemById } from './shop'
 
 /**
  * Pixel Points and quest progress, on the server.
@@ -99,6 +99,18 @@ function isWallet(address: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(address)
 }
 
+/**
+ * Whether this player may earn and spend at all.
+ *
+ * Separate from isWallet because durability and permission are two different
+ * questions: POINTS.allowGuests lets a preview session play the whole loop
+ * without a linked wallet, while the ledger still reports the balance as not
+ * durable, so nothing on screen claims it will be there tomorrow.
+ */
+function canEarn(address: string): boolean {
+  return isWallet(address) || POINTS.allowGuests
+}
+
 // ---------------------------------------------------------------------------
 // Cache and writes
 // ---------------------------------------------------------------------------
@@ -188,7 +200,10 @@ function sendLedger(address: string, wallet: Wallet): void {
       balance: wallet.balance,
       claims: JSON.stringify(wallet.claims),
       quests: JSON.stringify(wallet.quests),
-      owned: JSON.stringify(wallet.owned),
+      // freeStock is a testing switch, and this is the half of it that makes
+      // the ordinary path work: the client is told it owns the catalogue, so
+      // the inventory, the equip request and what comes back all agree.
+      owned: JSON.stringify(ADMIN.freeStock ? CATALOGUE.map((i) => i.id) : wallet.owned),
       equipped: JSON.stringify(wallet.equipped),
       durable: isWallet(address)
     },
@@ -200,7 +215,6 @@ function sendLedger(address: string, wallet: Wallet): void {
  * Starts the ledger. Called from main() only when running on the server.
  */
 export function runLedger(): void {
-
   engine.addSystem(flushSystem)
 
   room.onMessage('hello', async (_data, context) => {
@@ -215,7 +229,7 @@ export function runLedger(): void {
     const wallet = await load(address)
 
     const card = Array.from(data.strokes)
-    if (!wellFormed(card) || !isWallet(address)) {
+    if (!wellFormed(card) || !canEarn(address)) {
       sendLedger(address, wallet)
       return
     }
@@ -259,7 +273,7 @@ export function runLedger(): void {
     const amount = priceOf(key)
     // Already had, unknown, or a guest: answered, but paid nothing. The client
     // puts the claim back so it can be tried again rather than losing it.
-    if (!amount || wallet.claims.includes(key) || !isWallet(address)) {
+    if (!amount || wallet.claims.includes(key) || !canEarn(address)) {
       sendLedger(address, wallet)
       return
     }
@@ -283,7 +297,7 @@ export function runLedger(): void {
     if (!item || item.price <= 0) return
     if (wallet.owned.includes(item.id)) return
 
-    if (!isWallet(address)) {
+    if (!canEarn(address)) {
       void room.send('refused', { reason: 'Connect a wallet to keep anything you buy.' }, { to: [address] })
       return
     }
@@ -313,13 +327,41 @@ export function runLedger(): void {
 
     const item = itemById(data.id)
     if (!item) return
-    // Free stock needs no purchase; anything else has to have been bought.
-    if (item.price > 0 && !wallet.owned.includes(item.id)) return
+    // Free stock needs no purchase; anything else has to have been bought —
+    // unless ADMIN.freeStock is on, which is the whole point of it.
+    if (!ADMIN.freeStock && item.price > 0 && !wallet.owned.includes(item.id)) return
 
     if (wallet.equipped[item.kind] === item.id) return
     wallet.equipped[item.kind] = item.id
     touch(address)
 
+    sendLedger(address, wallet)
+  })
+
+  room.onMessage('grant', async (data, context) => {
+    const address = context?.from
+    if (!address) return
+
+    // Deliberately not ADMIN.enabled. An empty allow list means the test panel
+    // opens for everyone, which is what you want while building — it is not
+    // what you want for a button that prints money. This one needs the wallet
+    // written down.
+    const allowed = ADMIN.allow.some((a) => a.toLowerCase() === address.toLowerCase())
+    if (!allowed) {
+      void room.send(
+        'refused',
+        { reason: 'Add your wallet to ADMIN.allow in config.ts to grant points.' },
+        { to: [address] }
+      )
+      return
+    }
+
+    const wallet = await load(address)
+    const amount = Math.max(0, Math.min(100000, Math.floor(data.amount)))
+    wallet.balance += amount
+    touch(address)
+
+    void room.send('awarded', { amount, reason: 'Granted for testing' }, { to: [address] })
     sendLedger(address, wallet)
   })
 

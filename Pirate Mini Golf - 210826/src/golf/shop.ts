@@ -1,5 +1,6 @@
 import { Color4 } from '@dcl/sdk/math'
 
+import { ADMIN } from './config'
 import { room } from './room'
 
 /**
@@ -59,90 +60,190 @@ export type Item = {
    */
   power?: number
   forgiveness?: number
+  Damping?: number
 }
 
-const PUTTER = 'assets/scene/Golf/Pirate Putter.glb'
+// Club Skins
+const Club_Stick = 'assets/scene/Golf/Stick Club.glb'
+const Club_Standard = 'assets/scene/Golf/Standard Club.glb'
+const Club_Golden = 'assets/scene/Golf/Golden Club.glb'
+const Club_Ruby = 'assets/scene/Golf/Ruby Club.glb'
+const Club_Master = 'assets/scene/Golf/Master Club.glb'
+const Club_Pirate = 'assets/scene/Golf/Pirate Cutlass Club.glb'
+const Club_Flag = 'assets/scene/Golf/Flag Club.glb'
+const Club_Mech = 'assets/scene/Golf/Mechanical Club.glb'
+const Club_Neon = 'assets/scene/Golf/Neon Club.glb'
+const Club_Seaside = 'assets/scene/Golf/Seaside Club.glb'
+
+// Ball Skins
+const Ball_stone = 'assets/scene/Balls/Stone Ball.glb'
+const Ball_Standard = 'assets/scene/Balls/Standard Ball.glb'
+const Ball_Golden = 'assets/scene/Balls/Golden Ball.glb'
+const Ball_Ruby = 'assets/scene/Balls/Ruby Ball.glb'
+const Ball_Master = 'assets/scene/Balls/Master Ball.glb'
+const Ball_Crown = 'assets/scene/Balls/Crown Ball.glb'
+
 
 export const CATALOGUE: Item[] = [
   // --- clubs ---------------------------------------------------------------
   {
-    id: 'club-driftwood',
+    id: 'club-stick',
     kind: 'club',
-    name: 'Driftwood Putter',
-    blurb: 'Came off the beach. Does the job.',
+    name: 'Stick Putter',
+    blurb: 'Add Description',
     price: 0,
-    model: PUTTER
+    model: Club_Stick,
+    power: 0.9,
+    forgiveness: 0,
+    Damping: 0.55
   },
   {
-    id: 'club-brass',
+    id: 'club-standard',
     kind: 'club',
-    name: 'Brass Fitting',
-    blurb: 'Off a ship that is not coming back for it.',
+    name: 'Iron Club',
+    blurb: 'Add Description',
     price: 300,
-    model: PUTTER
+    model: Club_Standard,
+    power: 0.95,
+    forgiveness: 0.25,
+    Damping: 0.35
   },
   {
-    id: 'club-bosun',
+    id: 'club-golden',
     kind: 'club',
-    name: "Bosun's Mallet",
-    blurb: 'Heavier than it looks. Salt swears by it.',
+    name: "Golden Club",
+    blurb: 'Add Description',
     price: 600,
-    model: PUTTER
+    model: Club_Golden,
+    power: 1.0,
+    forgiveness: 0.5,
+    Damping: 0.28
   },
   {
-    id: 'club-kraken',
+    id: 'club-ruby',
     kind: 'club',
-    name: 'Kraken Bone',
-    blurb: 'He will not say where he got it.',
+    name: 'Ruby Club',
+    blurb: 'Add Description',
     price: 1000,
-    model: PUTTER
+    model: Club_Ruby,
+    power: 1.1,
+    forgiveness: 0.75,
+    Damping: 0.22
+  },
+  {
+    id: 'club-master',
+    kind: 'club',
+    name: "Master Club",
+    blurb: 'Add Description',
+    price: 250,
+    model: Club_Master,
+    power: 1.2,
+    forgiveness: 0.9,
+    Damping: 0.21
+  },
+  {
+    id: 'club-pirate',
+    kind: 'club',
+    name: 'Pirate Club',
+    blurb: 'Add Description',
+    price: 5000,
+    model: Club_Pirate,
+    power: 2,
+    forgiveness: 0.99,
+    Damping: 0.2
+  },{
+    id: 'club-flag',
+    kind: 'club',
+    name: "Flag Putter",
+    blurb: 'Add Description',
+    price: 9000,
+    model: Club_Flag,
+    power: 1.0,
+    forgiveness: 0.5,
+    Damping: 0.35
+  },
+  {
+    id: 'club-mech',
+    kind: 'club',
+    name: 'Mechanical Club',
+    blurb: 'Add Description',
+    price: 9000,
+    model: Club_Mech,
+    power: 1.0,
+    forgiveness: 0.5,
+    Damping: 0.35
+  },
+  {
+    id: 'club-neon',
+    kind: 'club',
+    name: "Neon Club",
+    blurb: 'Add Description',
+    price: 9000,
+    model: Club_Neon,
+    power: 1.0,
+    forgiveness: 0.5,
+    Damping: 0.35
+  },
+  {
+    id: 'club-seaside',
+    kind: 'club',
+    name: 'Seaside Club',
+    blurb: 'Add Description',
+    price: 9000,
+    model: Club_Seaside,
+    power: 1.0,
+    forgiveness: 0.5,
+    Damping: 0.35
   },
 
   // --- balls ---------------------------------------------------------------
   {
-    id: 'ball-white',
+    id: 'ball-stone',
     kind: 'ball',
-    name: 'Standard White',
-    blurb: 'A golf ball. Reliable in that way.',
+    name: 'Stone Ball',
+    blurb: 'Add Description',
     price: 0,
-    colour: Color4.White(),
-    emissive: 0.12
+    model: Ball_stone,
   },
   {
-    id: 'ball-gold',
+    id: 'ball-standard',
     kind: 'ball',
-    name: 'Doubloon Gold',
-    blurb: 'Worth less than it looks. Still worth something.',
+    name: 'Standard Ball',
+    blurb: 'Add Description',
     price: 100,
-    colour: Color4.create(1, 0.82, 0.3, 1),
-    emissive: 0.3
+    model: Ball_Standard,
   },
   {
-    id: 'ball-coral',
+    id: 'ball-golden',
     kind: 'ball',
-    name: 'Coral Pink',
-    blurb: 'Easy to find in the rough. Harder to live down.',
+    name: 'Golden Ball',
+    blurb: 'Add Description',
     price: 150,
-    colour: Color4.create(1, 0.45, 0.62, 1),
-    emissive: 0.25
+    model: Ball_Golden,
   },
   {
-    id: 'ball-lime',
+    id: 'ball-ruby',
     kind: 'ball',
-    name: 'Deck-light Lime',
-    blurb: 'Visible at night, which is when most balls are lost.',
+    name: 'Ruby Ball',
+    blurb: 'Add Description',
     price: 250,
-    colour: Color4.create(0.6, 1, 0.35, 1),
-    emissive: 0.3
+    model: Ball_Ruby,
   },
   {
-    id: 'ball-pearl',
+    id: 'ball-master',
     kind: 'ball',
-    name: 'Black Pearl',
-    blurb: 'Almost impossible to follow. That is the point.',
+    name: 'Master Ball',
+    blurb: 'Add Description',
     price: 400,
-    colour: Color4.create(0.12, 0.12, 0.16, 1),
-    emissive: 0.05
+    model: Ball_Master,
+  },
+  {
+    id: 'ball-crown',
+    kind: 'ball',
+    name: 'Crown Ball',
+    blurb: 'Add Description',
+    price: 250,
+    model: Ball_Crown,
   }
 ]
 
@@ -156,8 +257,8 @@ export function itemsOfKind(kind: ItemKind): Item[] {
 
 /** Free stock, which nobody has to buy and everybody starts with. */
 export const DEFAULTS: Record<ItemKind, string> = {
-  club: 'club-driftwood',
-  ball: 'ball-white'
+  club: 'club-stick',
+  ball: 'ball-stone'
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +276,7 @@ export function onEquipChanged(callback: (item: Item) => void): void {
 }
 
 export function isOwned(id: string): boolean {
+  if (ADMIN.freeStock) return true
   const item = itemById(id)
   if (item && item.price === 0) return true
   return owned.has(id)
@@ -221,9 +323,24 @@ export function buy(id: string): void {
   void room.send('buy', { id })
 }
 
-/** Asks to equip something already owned. */
+/**
+ * Asks to equip something already owned.
+ *
+ * Under freeStock it also applies straight away rather than waiting to be told
+ * — testing a club should not depend on the ledger answering, and the server
+ * is sent the same message regardless, so the real path still runs underneath.
+ */
 export function equip(id: string): void {
   if (!isOwned(id)) return
+
+  if (ADMIN.freeStock) {
+    const item = itemById(id)
+    if (item && equipped[item.kind] !== item.id) {
+      equipped[item.kind] = item.id
+      onEquip?.(item)
+    }
+  }
+
   void room.send('equip', { id })
 }
 
