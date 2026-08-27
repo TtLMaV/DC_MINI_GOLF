@@ -39,7 +39,19 @@ import { CLUB } from './config'
  *   model                     the .glb and its model-space correction
  */
 
-const MODEL = 'assets/scene/Golf/Pirate Putter.glb'
+/**
+ * What the club is built holding, before anything equips one.
+ *
+ * The starting club, so the first frame is already right. It used to be the
+ * Pirate Putter, which is not in the catalogue at all any more — and because
+ * nothing sets the club at start-up, and onEquipChanged only fires when the
+ * equipped item *changes*, a player holding the default club-stick never
+ * triggered a change and kept the putter for the whole session.
+ *
+ * fitClub() in index.ts now sets this properly from the catalogue on start-up.
+ * This constant only covers the moment before that runs.
+ */
+const MODEL = 'assets/scene/Golf/Stick Club.glb'
 
 const v3 = (p: { x: number; y: number; z: number }) => Vector3.create(p.x, p.y, p.z)
 

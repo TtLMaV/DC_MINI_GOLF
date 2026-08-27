@@ -1,6 +1,8 @@
 import { AudioSource, engine, Entity, Transform } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 
+import { PICKUP_SOUND } from './config'
+
 /**
  * Small pool of one-shot emitters. AudioSource plays from wherever its entity
  * sits, so each sound is moved to the point it happened before it fires.
@@ -14,7 +16,9 @@ const CLIP = {
   drop: 'assets/scene/Golf/sounds/drop.mp3',
   splash: 'assets/scene/Golf/sounds/splash.mp3',
   holed: 'assets/scene/Golf/sounds/holed.mp3',
-  charge: 'assets/scene/Golf/sounds/charge.mp3'
+  charge: 'assets/scene/Golf/sounds/charge.mp3',
+  shell: PICKUP_SOUND.shell,
+  coconut: PICKUP_SOUND.coconut
 } as const
 
 export type ClipName = keyof typeof CLIP

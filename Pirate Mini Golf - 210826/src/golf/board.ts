@@ -3,20 +3,24 @@ import {
   engine,
   Entity,
   InputAction,
-  Material,
   MeshCollider,
-  MeshRenderer,
   pointerEventsSystem,
   TextShape,
   Transform
 } from '@dcl/sdk/ecs'
 import { Color3, Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
 import { BOARD } from './config'
-import { cupCentre, HOLES } from './course'
 import { present, roster } from './net'
 
 /**
  * The sign-up board by the first tee.
+ *
+ * The board itself is not ours — it is part of Decking.glb. This module only
+ * paints lettering onto it and puts an invisible collider in front so it can be
+ * clicked. It used to draw its own translucent box and work out where to stand
+ * it from the first tee, which is why it ended up floating in front of the real
+ * board with the title hanging off both ends. The spot now comes from the
+ * 'Artwork Info' marker in Creator Hub, written into BOARD.position.
  *
  * Joining is deliberately an explicit act rather than something that happens to
  * you when you wander in. Decentraland scenes get passers-by, and a leaderboard
@@ -30,6 +34,7 @@ import { present, roster } from './net'
  */
 
 let panel: Entity | undefined
+let hit: Entity | undefined
 let title: Entity | undefined
 let list: Entity | undefined
 let onJoin: (() => void) | undefined
@@ -54,48 +59,49 @@ export function requestJoin(): void {
 export function setupBoard(join: () => void): void {
   onJoin = join
 
-  const hole = HOLES[0]
-  const cup = cupCentre(hole)
-  // Stand it just behind the tee, turned to face back down the hole so you read
-  // it as you walk up rather than after you have gone past.
-  const dx = hole.tee.x - cup.x
-  const dz = hole.tee.z - cup.z
-  const l = Math.sqrt(dx * dx + dz * dz) || 1
-  const px = hole.tee.x + (dx / l) * BOARD.behindTee + BOARD.sideOffset * (dz / l)
-  const pz = hole.tee.z + (dz / l) * BOARD.behindTee - BOARD.sideOffset * (dx / l)
+  const at = BOARD.position
+  where = Vector3.create(at.x, at.y, at.z)
+  console.log(`[golf] sign-up board at ${at.x}, ${at.y}, ${at.z} facing ${BOARD.facingDegrees}`)
 
-  where = Vector3.create(px, hole.tee.y + BOARD.height, pz)
-  console.log(`[golf] sign-up board at ${px.toFixed(2)}, ${(hole.tee.y + BOARD.height).toFixed(2)}, ${pz.toFixed(2)}`)
-
+  // An unscaled anchor at the marker. Everything else hangs off it at its own
+  // size, which is why there is no inverse-scale on the text any more: the old
+  // panel was a stretched box, children inherited the stretch, and every child
+  // had to divide it back out.
   panel = engine.addEntity()
-  MeshRenderer.setBox(panel)
-  // Without this the board is invisible to the pointer and E does nothing:
-  // MeshRenderer only draws, it does not take raycasts. CL_POINTER makes it
-  // clickable without also making it something you bump into.
-  MeshCollider.setBox(panel, ColliderLayer.CL_POINTER)
-  Material.setPbrMaterial(panel, {
-    albedoColor: Color4.create(0.05, 0.07, 0.1, 0.92),
-    emissiveColor: Color3.create(0.06, 0.09, 0.13),
-    emissiveIntensity: 0.5,
-    roughness: 0.9
-  })
   Transform.create(panel, {
-    position: Vector3.create(px, hole.tee.y + BOARD.height, pz),
-    rotation: Quaternion.fromToRotation(Vector3.Forward(), Vector3.create(-dx / l, 0, -dz / l)),
-    scale: Vector3.create(BOARD.width, BOARD.tall, 0.08)
+    position: Vector3.create(at.x, at.y, at.z),
+    rotation: Quaternion.fromEulerDegrees(0, BOARD.facingDegrees, 0)
+  })
+
+  // The clickable area, invisible. MeshCollider takes the raycast; there is no
+  // MeshRenderer because the board it sits on is the decking model now, and
+  // drawing a box over it is the thing we are getting rid of. CL_POINTER makes
+  // it clickable without also making it something you walk into.
+  hit = engine.addEntity()
+  MeshCollider.setBox(hit, ColliderLayer.CL_POINTER)
+  Transform.create(hit, {
+    position: Vector3.create(0, 0, -0.02),
+    scale: Vector3.create(BOARD.width, BOARD.tall, 0.04),
+    parent: panel
   })
 
   title = engine.addEntity()
   Transform.create(title, {
-    position: Vector3.create(0, BOARD.titleY, -0.6),
-    // The panel is scaled, and children inherit that, so undo it or the text
-    // comes out stretched to match the box.
-    scale: Vector3.create(1 / BOARD.width, 1 / BOARD.tall, 1),
+    position: Vector3.create(BOARD.textX, BOARD.titleY, BOARD.standoff),
+    rotation: Quaternion.fromEulerDegrees(0, BOARD.textYaw, 0),
     parent: panel
   })
   TextShape.create(title, {
     text: 'PIRATE MINI GOLF',
-    fontSize: 3,
+    fontSize: BOARD.titleSize,
+    // width and height are the box the text is *aligned* in. They do not scale
+    // the lettering down to fit — nothing in SDK7 does — so the size that
+    // stops the title running off the ends is BOARD.titleSize, worked out by
+    // hand in config.ts. These two are here so centring has something to
+    // centre against.
+    width: BOARD.width,
+    height: BOARD.tall,
+    textWrapping: false,
     textColor: Color4.create(0.95, 0.78, 0.33, 1),
     outlineWidth: 0.15,
     outlineColor: Color3.Black()
@@ -103,13 +109,16 @@ export function setupBoard(join: () => void): void {
 
   list = engine.addEntity()
   Transform.create(list, {
-    position: Vector3.create(0, -0.05, -0.6),
-    scale: Vector3.create(1 / BOARD.width, 1 / BOARD.tall, 1),
+    position: Vector3.create(BOARD.textX, BOARD.listY, BOARD.standoff),
+    rotation: Quaternion.fromEulerDegrees(0, BOARD.textYaw, 0),
     parent: panel
   })
   TextShape.create(list, {
     text: 'Nobody playing yet',
-    fontSize: 2,
+    fontSize: BOARD.listSize,
+    width: BOARD.width,
+    height: BOARD.tall,
+    textWrapping: false,
     textColor: Color4.create(0.9, 0.92, 0.96, 1),
     outlineWidth: 0.12,
     outlineColor: Color3.Black()
@@ -117,7 +126,7 @@ export function setupBoard(join: () => void): void {
 
   pointerEventsSystem.onPointerDown(
     {
-      entity: panel,
+      entity: hit,
       opts: { button: InputAction.IA_PRIMARY, hoverText: 'Join the round', maxDistance: BOARD.reach }
     },
     () => {
@@ -130,8 +139,8 @@ export function setupBoard(join: () => void): void {
 /** Called once the local player is in, so the board stops offering. */
 export function markJoined(): void {
   joined = true
-  if (!panel) return
-  pointerEventsSystem.removeOnPointerDown(panel)
+  if (!hit) return
+  pointerEventsSystem.removeOnPointerDown(hit)
 }
 
 /**
@@ -144,10 +153,10 @@ export function markJoined(): void {
  */
 export function markLeft(): void {
   joined = false
-  if (!panel) return
+  if (!hit) return
   pointerEventsSystem.onPointerDown(
     {
-      entity: panel,
+      entity: hit,
       opts: { button: InputAction.IA_PRIMARY, hoverText: 'Join the round', maxDistance: BOARD.reach }
     },
     () => {

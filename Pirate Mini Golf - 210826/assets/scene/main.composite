@@ -562,6 +562,27 @@
             "parent": 533
           }
         },
+        "536": {
+          "json": {
+            "position": {
+              "x": 19.25,
+              "y": 0,
+              "z": 49.25
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
         "537": {
           "json": {
             "position": {
@@ -1128,6 +1149,132 @@
             },
             "parent": 533
           }
+        },
+        "565": {
+          "json": {
+            "position": {
+              "x": 19.25,
+              "y": 0,
+              "z": 49.25
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "566": {
+          "json": {
+            "position": {
+              "x": 19.25,
+              "y": 0,
+              "z": 49.25
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "567": {
+          "json": {
+            "position": {
+              "x": 19.25,
+              "y": 0,
+              "z": 49.25
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "568": {
+          "json": {
+            "position": {
+              "x": 19.25,
+              "y": 0,
+              "z": 49.25
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "570": {
+          "json": {
+            "position": {
+              "x": -13.130863189697266,
+              "y": 2.4156246185302734,
+              "z": 9.383520126342773
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 1,
+              "z": 0,
+              "w": 6.123234262925839e-17
+            },
+            "parent": 0
+          }
+        },
+        "571": {
+          "json": {
+            "position": {
+              "x": -13.130863189697266,
+              "y": 2.4569413661956787,
+              "z": 17.368507385253906
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 1,
+              "z": 0,
+              "w": 6.123234262925839e-17
+            },
+            "parent": 0
+          }
         }
       }
     },
@@ -1206,6 +1353,80 @@
                 "weight": -1,
                 "speed": 1,
                 "loop": true,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "566": {
+          "json": {
+            "states": [
+              {
+                "clip": "Sway",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "567": {
+          "json": {
+            "states": [
+              {
+                "clip": "Flow.002",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Flow.003",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Flow.004",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "568": {
+          "json": {
+            "states": [
+              {
+                "clip": "Flow.002",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Flow.003",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "Flow.004",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
                 "shouldReset": false
               }
             ]
@@ -1390,6 +1611,13 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "536": {
+          "json": {
+            "src": "assets/scene/Barrels_Crates/Barrels and Crates.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "537": {
           "json": {
             "src": "assets/scene/Holes/Hole 8/Hole 8 Base.glb",
@@ -1561,6 +1789,48 @@
         "564": {
           "json": {
             "src": "assets/scene/Holes/Hole 7/boat.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "565": {
+          "json": {
+            "src": "assets/scene/Cannons/Cannons.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "566": {
+          "json": {
+            "src": "assets/scene/Skeletons/Skeletons.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "567": {
+          "json": {
+            "src": "assets/scene/Waterfall/Horizontal Waterfall.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "568": {
+          "json": {
+            "src": "assets/scene/Waterfall/Vertical Waterfall.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "570": {
+          "json": {
+            "src": "assets/scene/Decking/Sign.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "571": {
+          "json": {
+            "src": "assets/scene/Decking/Sign.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -1845,6 +2115,11 @@
             "value": "Hole 7 Trim.glb"
           }
         },
+        "536": {
+          "json": {
+            "value": "Barrels and Crates.glb"
+          }
+        },
         "537": {
           "json": {
             "value": "Hole 8 Base.glb"
@@ -1979,6 +2254,36 @@
           "json": {
             "value": "boat.glb"
           }
+        },
+        "565": {
+          "json": {
+            "value": "Cannons.glb"
+          }
+        },
+        "566": {
+          "json": {
+            "value": "Skeletons.glb"
+          }
+        },
+        "567": {
+          "json": {
+            "value": "Horizontal Waterfall.glb"
+          }
+        },
+        "568": {
+          "json": {
+            "value": "Vertical Waterfall.glb"
+          }
+        },
+        "570": {
+          "json": {
+            "value": "Quests"
+          }
+        },
+        "571": {
+          "json": {
+            "value": "LeaderBoard"
+          }
         }
       }
     },
@@ -2007,26 +2312,6 @@
               "Tag Group 3",
               "Tag Group 4"
             ]
-          }
-        }
-      }
-    },
-    {
-      "name": "inspector::Selection",
-      "jsonSchema": {
-        "type": "object",
-        "properties": {
-          "gizmo": {
-            "type": "integer",
-            "serializationType": "int32"
-          }
-        },
-        "serializationType": "map"
-      },
-      "data": {
-        "548": {
-          "json": {
-            "gizmo": 0
           }
         }
       }
@@ -2088,7 +2373,14 @@
                   540,
                   548,
                   556,
-                  543
+                  543,
+                  536,
+                  565,
+                  566,
+                  567,
+                  568,
+                  570,
+                  571
                 ]
               },
               {
@@ -2204,6 +2496,7 @@
               },
               {
                 "entity": 533,
+                "open": true,
                 "children": [
                   534,
                   535,
@@ -2354,6 +2647,34 @@
               {
                 "entity": 564,
                 "children": []
+              },
+              {
+                "entity": 536,
+                "children": []
+              },
+              {
+                "entity": 565,
+                "children": []
+              },
+              {
+                "entity": 566,
+                "children": []
+              },
+              {
+                "entity": 567,
+                "children": []
+              },
+              {
+                "entity": 568,
+                "children": []
+              },
+              {
+                "entity": 570,
+                "children": []
+              },
+              {
+                "entity": 571,
+                "children": []
               }
             ]
           }
@@ -2449,6 +2770,9 @@
         "535": {
           "json": {}
         },
+        "536": {
+          "json": {}
+        },
         "537": {
           "json": {}
         },
@@ -2531,6 +2855,24 @@
           "json": {}
         },
         "564": {
+          "json": {}
+        },
+        "565": {
+          "json": {}
+        },
+        "566": {
+          "json": {}
+        },
+        "567": {
+          "json": {}
+        },
+        "568": {
+          "json": {}
+        },
+        "570": {
+          "json": {}
+        },
+        "571": {
           "json": {}
         }
       }
@@ -4517,8 +4859,8 @@
                   "z": {
                     "$case": "range",
                     "value": [
-                      15.220000267028809,
-                      18.219999313354492
+                      19.5,
+                      22.5
                     ]
                   }
                 },

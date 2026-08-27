@@ -1,7 +1,7 @@
 import { Animator, engine, GltfContainer, Name } from '@dcl/sdk/ecs'
 
 /**
- * Plays the baked animations on scene props — currently the ocean.
+ * Plays the baked animations on scene props — the ocean and the waterfalls.
  *
  * A GltfContainer does not play anything on its own: an embedded clip sits
  * inert until an Animator asks for it *by name*. That is true of shape keys,
@@ -25,21 +25,48 @@ type AnimatedProp = {
 }
 
 /**
- * Ocean V2 ships four actions — Flow, Flow.001, Flow.002 and Flow.003 — and all
- * four drive the same 41 'belt_*' nodes, so they are speed variants of one
- * animation rather than four separate things. Playing more than one would have
- * them fighting over the same transforms. The cycle times are:
+ * Every water model is the same rig: 41 'belt_*' nodes driven by a set of
+ * 'Flow*' actions that are speed variants of one another, not separate
+ * animations. Playing more than one has them fighting over the same
+ * transforms, so each prop picks exactly one.
  *
- *   Flow      1.6s    a rushing conveyor
- *   Flow.001  1.6s
- *   Flow.002  3.3s
- *   Flow.003  33.3s   a slow ocean drift
+ * Clip names are matched as plain strings and mean nothing outside the file
+ * they came from. The three models disagree about them right now, read out of
+ * the .glb files as they stand:
  *
- * Flow.003 is the one that reads as sea rather than a mill race, and `speed`
- * scales it from here without touching the file: 0.5 halves it, 2 doubles it.
- * At 0.5 against a 66.6s clip the belts take about 133s to come round.
+ *   Vertical Waterfall    Flow 2.00s  Flow.001 3.33s  Flow.002 0.25s
+ *                         Flow.003 41.67s  Flow.004 4.17s
+ *   Horizontal Waterfall  Flow.002 4.17s  Flow.003 41.67s  Flow.004 4.17s
+ *   Ocean V2              Flow.002 4.17s  Flow.003 41.67s  Flow.004 4.17s
+ *
+ * So 'Flow.002' is a four-second flow on two of them and a quarter-second
+ * strobe on the third. That is why each prop names its own clip below rather
+ * than sharing one, and why a re-export is always worth re-reading: the code
+ * cannot tell a renamed action from a missing one.
+ *
+ * The ocean wants the long drift, halved again, or it reads as a mill race.
+ * The waterfalls want a fast cycle — they are falling, not lapping.
  */
-const PROPS: AnimatedProp[] = [{ match: 'Ocean', clips: ['Flow.003'], speed: 0.5 }]
+const PROPS: AnimatedProp[] = [
+  { match: 'Ocean', clips: ['Flow.003'], speed: 0.5 },
+  // Still the old export: 4.17s, so it needs the speed multiplier to keep up.
+  { match: 'Horizontal Waterfall', clips: ['Flow.002'], speed: 1.5 },
+  // Re-exported with five actions where the others have three. Flow.004 is
+  // the one name present in every version of this model — 4.17s — so the
+  // speed comes from the multiplier rather than from a newly-added action the
+  // rest of the pipeline has not caught up with.
+  //
+  // 20x against a 4.17s clip is a belt cycle every fifth of a second, or about
+  // 0.21s. That is very close to the 0.25s 'Flow.002' action baked into this
+  // model's re-export, which is presumably the rate it was authored to run at
+  // — so this is the number the file itself is pointing at, arrived at from
+  // the other direction. 40 was the literal 20x of what it had been running
+  // at and read as a strobe; halving it is this.
+  //
+  // Not 'Flow' (2.00s): it exists in the file but not in the Animator that
+  // Creator Hub wrote, and not in the older exports either.
+  { match: 'Vertical Waterfall', clips: ['Flow.004'], speed: 20 }
+]
 
 export function setupWater(): void {
   const matched = new Set<string>()
@@ -63,14 +90,17 @@ export function setupWater(): void {
           weight: 1
         }))
       })
-      console.log(`[golf] animating "${name.value}" with ${prop.clips.join(', ')}`)
+      console.log(
+        `[golf] animating "${name.value}" with ${prop.clips.join(', ')} at ${prop.speed}x`
+      )
     }
   }
 
   for (const prop of PROPS) {
     if (matched.has(prop.match)) continue
     console.log(
-      `[golf] nothing in the scene matches "${prop.match}" — models present: ${seen.join(' | ')}`
+      `[golf] WATER MISS: nothing matches "${prop.match}", so it will not move. ` +
+        `Models present: ${seen.join(' | ')}`
     )
   }
 }

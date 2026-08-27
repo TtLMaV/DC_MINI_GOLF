@@ -79,10 +79,58 @@ const visuals = new Map<Entity, { ball: Entity; label: Entity }>()
 /** Throttle on publishing ball position — see publishBall. */
 let ballClock = 0
 
+/**
+ * Whether the explorer has actually told us who this is yet.
+ *
+ * getPlayer() answers null until the profile has loaded, which is routinely
+ * *after* the scene has started. Everything below used to be read once in
+ * setupNet and kept forever, so a slow profile left the player permanently
+ * called 'Player' with a made-up id — silently, because a fallback that works
+ * looks exactly like a fallback that was never needed.
+ *
+ * That was harmless while nothing read the name. It stopped being harmless
+ * when the leaderboard started sending it to the server, and it became a
+ * visible fault when the test panel started checking it: 'Player' does not
+ * match 'thepixelarcade', so the panel simply never opened.
+ */
+let identityKnown = false
+
+/**
+ * Takes the profile as soon as there is one, and keeps the synced entity in
+ * step.
+ *
+ * Runs every frame only until it succeeds, then takes itself off the engine.
+ * The name and id are also re-read lazily by the getters below, so a caller
+ * that asks early and a caller that asks late get the same answer.
+ */
+function identitySystem(): void {
+  if (identityKnown) {
+    engine.removeSystem(identitySystem)
+    return
+  }
+  const p = getPlayer()
+  if (!p || !p.userId) return
+
+  myId = p.userId
+  if (p.name) myName = p.name
+  identityKnown = true
+
+  if (mine) {
+    const row = GolfPlayer.getMutableOrNull(mine)
+    if (row) {
+      row.userId = myId
+      row.name = myName
+    }
+  }
+  console.log(`[golf] identity resolved: ${myName} (${myId})`)
+  engine.removeSystem(identitySystem)
+}
+
 export function setupNet(): void {
   const p = getPlayer()
   myId = p?.userId ?? `local-${engine.RootEntity}`
   myName = p?.name ?? 'Player'
+  identityKnown = !!p?.userId
 
   mine = engine.addEntity()
   GolfPlayer.create(mine, {
@@ -104,14 +152,45 @@ export function setupNet(): void {
   syncEntity(mine, [GolfPlayer.componentId])
 
   onLeaveScene((userId) => departed.add(userId))
+
+  // Only if the profile was not ready at start-up, which is the common case.
+  if (!identityKnown) engine.addSystem(identitySystem)
 }
 
 export function myUserId(): string {
+  if (!identityKnown) identitySystem()
   return myId
 }
 
 export function myDisplayName(): string {
+  if (!identityKnown) identitySystem()
   return myName
+}
+
+/** True once the explorer has actually said who this is. */
+export function identityReady(): boolean {
+  return identityKnown
+}
+
+/**
+ * Whether the player is the person named.
+ *
+ * Comparing Decentraland names is not string equality. A claimed name shows as
+ * "thepixelarcade"; an unclaimed one carries a four-digit tag —
+ * "thepixelarcade#1a2b" — and the same person can appear either way depending
+ * on what they are wearing and whether the claim has gone through. Case is not
+ * dependable either. So the tag is cut, both sides are lower-cased, and only
+ * then are they compared.
+ *
+ * Worth saying out loud: a name is not proof of anything. The client reports
+ * its own, so this is a convenience for deciding what to *draw*, never a
+ * permission. Anything that costs or mints Pixel Points is checked on the
+ * server against a wallet, which is the only identity here that cannot be
+ * typed in.
+ */
+export function nameMatches(want: string): boolean {
+  const strip = (n: string) => n.trim().toLowerCase().replace(/#[0-9a-f]{4}$/i, '')
+  return strip(want) !== '' && strip(want) === strip(myName)
 }
 
 export function ready(): boolean {

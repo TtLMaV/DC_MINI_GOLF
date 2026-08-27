@@ -12,7 +12,15 @@ import { MUSIC } from './config'
  * underground since its position is then irrelevant.
  */
 
-const TRACK = 'assets/scene/Golf/sounds/pirate-music.mp3'
+/**
+ * The soundtrack.
+ *
+ * The first track is still in the folder as pirate-music.mp3 — switching back
+ * is this one line. Worth knowing that this one is 6.3MB against the old one's
+ * 429KB: ten and a half minutes rather than a short loop, so it repeats far
+ * less obviously, at the cost of a slower first load.
+ */
+const TRACK = 'assets/scene/Golf/sounds/pirate-music-2.mp3'
 
 let source: Entity | undefined
 

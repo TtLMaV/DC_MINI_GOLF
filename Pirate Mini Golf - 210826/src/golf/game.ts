@@ -11,13 +11,14 @@ import {
   updateLine,
   updateRing
 } from './aim'
-import { Club, createClub, playStrike, updateClub } from './club'
-import { ADMIN, BOARD, CUP, FREE, RULES, SHOT } from './config'
+import { Club, createClub, playStrike, setClubVisible, updateClub } from './club'
+import { ADMIN, BOARD, CLUB_CARRY, CUP, FREE, NPC_LOOK, RULES, SHOPKEEPER, SHOT } from './config'
 import { cupCentre, Hole, HOLES, PRACTICE, SECRET, teeStand, TOTAL_PAR } from './course'
 import { boardPosition, markJoined, markLeft, requestJoin, updateBoard } from './board'
-import { myRow, myUserId, publishBall, roster, updateRemotes } from './net'
-import { close as closeDialog, talking, updateNpcs } from './npc'
-import { claimSecretHole, previewAward, submitRound } from './points'
+import { myRow, myUserId, nameMatches, publishBall, roster, updateRemotes } from './net'
+import { dismiss as dismissDialog, distanceToNpc, talking, updateNpcs } from './npc'
+import { detectorIsOut, hasDetector, overFind, toggleDetector, tryDig } from './detector'
+import { claimSecretHole, playerStanding, previewAward, submitRound } from './points'
 import { report as reportQuest } from './quests'
 import { closeShop, shopOpen } from './shop'
 import { play, setCharging } from './sfx'
@@ -56,6 +57,7 @@ export let curball: ballStats = {
   ballpowerMod: 0.7
 }
 
+
 export type Phase =
   | 'walking' // too far from the ball to play
   | 'ready' // in range, waiting to address
@@ -71,6 +73,29 @@ export type Toast = {
   detail: string
   ttl: number
   tone: 'good' | 'bad' | 'neutral'
+}
+
+/**
+ * Whether this player counts as the person building the scene.
+ *
+ * Either list will do, a wallet in ADMIN.allow or a name in ADMIN.allowNames,
+ * because they answer the same question by different means and a person should
+ * not have to be in both.
+ *
+ * Only when *both* are empty does it open for anybody, which is the building
+ * default. Filling in either one closes it to everyone else, so naming
+ * yourself is enough to lock it without also having to look your wallet up.
+ *
+ * Module level rather than a method on Game, because the debug drawing in
+ * index.ts needs the same answer and there is only one right version of it.
+ */
+export function adminAllowed(): boolean {
+  if (!ADMIN.enabled) return false
+  if (ADMIN.allow.length === 0 && ADMIN.allowNames.length === 0) return true
+
+  const me = myUserId().toLowerCase()
+  if (ADMIN.allow.some((a) => a.toLowerCase() === me)) return true
+  return ADMIN.allowNames.some((n) => nameMatches(n))
 }
 
 export type GameState = {
@@ -144,6 +169,8 @@ export class Game {
   readonly club: Club
   /** Aim direction as a compass yaw in radians, taken from where you look. */
   private aimYaw = 0
+  /** Club asked for by hand, with 4. Cleared when a round takes over. */
+  private clubOut = false
 
   private settleTimer = 0
   /** Ball position last frame, so a fast pass over the cup cannot be missed. */
@@ -257,13 +284,44 @@ export class Game {
     const player = Transform.getOrNull(engine.PlayerEntity)
     if (!player) return
 
-    const other = this.state.freeHole === 'practice' ? SECRET : PRACTICE
+    const goingToSecret = this.state.freeHole === 'practice'
+    const other = goingToSecret ? SECRET : PRACTICE
     const dx = player.position.x - other.tee.x
     const dz = player.position.z - other.tee.z
-    if (Math.sqrt(dx * dx + dz * dz) > FREE.switchRange) return
+    const near = Math.sqrt(dx * dx + dz * dz) <= FREE.switchRange
 
-    this.beginFree(this.state.freeHole === 'practice' ? 'secret' : 'practice')
+    if (!near) {
+      // Left the tee, so the locked message may be shown again next time.
+      this.secretRefused = false
+      return
+    }
+
+    // Locked until the ladder says otherwise. Only on the way *to* it: walking
+    // back to the practice green is never refused, or somebody who levelled
+    // down — which cannot happen, but the shape of the check should not depend
+    // on that — would be marooned out there.
+    if (goingToSecret && playerStanding().level < FREE.secretLevel) {
+      // Once per approach, not once per frame. This runs every frame you are
+      // stood inside the range, and a toast that reprints sixty times a second
+      // is a toast that never goes away.
+      if (!this.secretRefused) {
+        this.secretRefused = true
+        this.toast(
+          'The tenth is shut',
+          `Level ${FREE.secretLevel} opens it. Salt knows more than he lets on.`,
+          'bad',
+          4
+        )
+      }
+      return
+    }
+
+    this.secretRefused = false
+    this.beginFree(goingToSecret ? 'secret' : 'practice')
   }
+
+  /** Whether the locked message has already been shown for this approach. */
+  private secretRefused = false
 
   /** Called by the sign-up board. */
   join(): void {
@@ -373,12 +431,8 @@ export class Game {
   }
 
 
-  /** Whether this player may open the test panel. */
   private adminAllowed(): boolean {
-    if (!ADMIN.enabled) return false
-    if (ADMIN.allow.length === 0) return true
-    const me = myUserId().toLowerCase()
-    return ADMIN.allow.some((a) => a.toLowerCase() === me)
+    return adminAllowed()
   }
 
   /**
@@ -481,15 +535,48 @@ export class Game {
     // row of it is a click target, and a stray E while reading prices should
     // not put the ball down the fairway.
     if (shopOpen()) {
+      // Walking away shuts the crate, the same as it ends a conversation.
+      // Salt opens the shop from a choice that closes the dialogue, so there
+      // is no conversation left to carry the leave — it has to be checked
+      // against him directly.
+      if (distanceToNpc(SHOPKEEPER.id) > NPC_LOOK.leaveRange) closeShop()
       if (inputSystem.isTriggered(InputAction.IA_SECONDARY, PointerEventType.PET_DOWN)) closeShop()
       return
+    }
+
+    // 3 stows the detector, or gets it back out. Only once Sally has given you
+    // one, so the key does nothing for anybody who has not been up the beach.
+    if (hasDetector() && inputSystem.isTriggered(InputAction.IA_ACTION_5, PointerEventType.PET_DOWN)) {
+      const out = toggleDetector()
+      if (out) this.clubOut = false
+      this.toast(out ? 'Detector out' : 'Detector away', out ? 'Sweep slowly.' : '', 'neutral', 1.4)
+      return
+    }
+
+    // 4 takes the club out, or puts it away. Only worth pressing when the
+    // course is not already deciding for you.
+    if (inputSystem.isTriggered(InputAction.IA_ACTION_6, PointerEventType.PET_DOWN)) {
+      this.clubOut = !this.clubOut
+      this.toast(this.clubOut ? 'Club out' : 'Club away', '', 'neutral', 1.2)
+      return
+    }
+
+    // Digging takes E off the club, but only while the detector is out and you
+    // are actually stood over something — so it can never eat a swing.
+    if (detectorIsOut() && overFind()) {
+      if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)) {
+        if (tryDig()) {
+          this.toast('Scrap', 'Something metal, and older than you.', 'good', 1.6)
+          return
+        }
+      }
     }
 
     // A conversation takes over the controls. Without this, E would advance the
     // dialog and swing the club on the same press, and the ball would be gone
     // before you had finished reading.
     if (talking()) {
-      if (inputSystem.isTriggered(InputAction.IA_SECONDARY, PointerEventType.PET_DOWN)) closeDialog()
+      if (inputSystem.isTriggered(InputAction.IA_SECONDARY, PointerEventType.PET_DOWN)) dismissDialog()
       return
     }
 
@@ -598,6 +685,7 @@ export class Game {
         ? this.swing.power
         : 0
     updateClub(this.club, dt, swinging, backswing)
+    this.carry()
   }
 
   /**
@@ -633,6 +721,21 @@ export class Game {
       return true
     }
     return false
+  }
+
+  /**
+   * Decides what is in your hand this frame.
+   *
+   * One rule in one place, because the club and the detector share the
+   * right-hand anchor and anything that sets them independently ends up with
+   * both or neither. The detector wins outright when it is out; otherwise the
+   * club appears when there is golf happening or when it has been asked for.
+   */
+  private carry(): void {
+    const playing =
+      CLUB_CARRY.showInPhases.indexOf(this.state.phase) >= 0 ||
+      (CLUB_CARRY.showWhilePractising && this.state.practising && this.state.phase !== 'walking')
+    setClubVisible(this.club, !detectorIsOut() && (playing || this.clubOut))
   }
 
   private measure(): { x: number; y: number; z: number } {
@@ -723,16 +826,15 @@ export class Game {
       this.release()
     }
   }
-  
+
   private release(): void {
     const ball = this.physics.position()
-    const power = this.swing.power * curball.ballpowerMod
+    const power = this.swing.power /* curball.ballpowerMod*/
 
     // A missed impact click bends the shot off the aim line. This is the only
     // thing that makes the meter a skill rather than a formality.
     const aim = this.aimVector()
-    const bend = (1 - curball.ballAngleMod) * (deviationDegrees(this.swing) * Math.PI) / 180
-    //console.log(bend)
+    const bend = /*(1 - curball.ballAngleMod) **/ (deviationDegrees(this.swing) * Math.PI) / 180
     const cos = Math.cos(bend)
     const sin = Math.sin(bend)
     const dirX = aim.x * cos + aim.z * sin
@@ -764,6 +866,7 @@ export class Game {
     if (this.checkLost(ball)) return
 
     if (this.physics.settled()) {
+      this.physics.freeze()
       this.settleTimer += dt
       if (this.settleTimer >= RULES.settleTime) {
         // Stopped. If it stopped in the hole, it is in the hole.
@@ -1046,7 +1149,16 @@ export class Game {
   private finishRound(): void {
     const total = this.playedTotal
     const overall = this.toPar
-    reportQuest({ kind: 'roundComplete', strokes: total, toPar: overall })
+    // The card goes with it: several quests are about the shape of the round
+    // rather than its total, and this is the only moment the whole thing is
+    // known. Copied rather than passed, so a quest predicate cannot reach back
+    // into the live scorecard.
+    reportQuest({
+      kind: 'roundComplete',
+      strokes: total,
+      toPar: overall,
+      card: this.state.card.slice()
+    })
     const label = overall === 0 ? 'level par' : overall > 0 ? `+${overall}` : `${overall}`
 
     const field = roster().filter((p) => p.round === this.state.round)

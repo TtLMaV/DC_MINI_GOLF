@@ -2,13 +2,23 @@ import { getExplorerInformation } from '~system/Runtime'
 
 import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { Label, PositionUnit, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
-import { POINTS, SWING } from './config'
+import { COCONUTS, POINTS, SHOT, SWING, SHELLS } from './config'
 import { HOLES, SECRET, TOTAL_PAR } from './course'
+import { shellsCarried } from './shells'
+import { coconutsCarried } from './coconuts'
+import { drinkIsUp, drinkLeft } from './drink'
+import { levelUpBanner } from './levelup'
+import { detectorHeat, detectorIsOut, detectorNearest, overFind, scrapCarried } from './detector'
 import { Game } from './game'
 import { myUserId, roster } from './net'
 import { choose, currentNode, nodeChoices, nodeText, speakerName } from './npc'
-import { balance, grantPoints, pointsAreLocal, pointsStatus, pointsVisible } from './points'
-import { trackedQuests } from './quests'
+import { balance, grantPoints, pointsAreLocal, pointsStatus, pointsVisible,
+  claimedKeys,
+  coconutsToday,
+  playerStanding,
+  shellsToday
+} from './points'
+import { giverName, questById, questsByStatus } from './quests'
 import {
   BAD,
   CREAM,
@@ -32,7 +42,9 @@ import {
   equip,
   equippedId,
   isOwned,
+  isUnlocked,
   itemsOfKind,
+  unlockLabel,
   setShopTab,
   shopOpen,
   shopTab
@@ -114,55 +126,635 @@ function pointsChip() {
 }
 
 /**
- * The quest tracker, under whichever top strip is showing.
+ * The level chip, sat beside the points chip and built the same way.
  *
- * Only what is running: a quest nobody has taken is not a to-do list, it is
- * something a character will mention when you talk to them.
+ * Same shape as pointsChip on purpose: a small dim label on the left, the
+ * number in gold on the right, in the same panel at the same height. Two
+ * chips that mean "here is a number about you" should not be two different
+ * shapes.
+ *
+ * The rank name is the label. It costs nothing to show — the chip needs a
+ * label either way, and "Deckhand 7" says more than "LV 7" for the same room.
+ *
+ * Nothing here is stored: standing() is a function of lifetime points, so this
+ * cannot fall out of step with the balance next to it.
  */
-function questTracker() {
-  const running = trackedQuests()
-  if (running.length === 0) return null
+function levelChip() {
+  if (!pointsVisible()) return null
+
+  const loading = pointsStatus() === 'loading'
+  const me = playerStanding()
+
+  return (
+    <UiEntity
+      uiTransform={{
+        width: 186,
+        height: 62,
+        margin: { left: 10 },
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: { left: 16, right: 16 }
+      }}
+      uiBackground={panel()}
+    >
+      <Label
+        value={loading ? '' : me.rank.name}
+        fontSize={16}
+        color={DIM}
+        uiTransform={{ width: 106, height: 30 }}
+        textAlign="middle-left"
+      />
+      <Bold
+        value={loading ? '\u2014' : `${me.level}`}
+        fontSize={24}
+        color={GOLD}
+        outline={SHADOW}
+        spread={1}
+        width={48}
+        height={30}
+        textAlign="middle-right"
+      />
+    </UiEntity>
+  )
+}
+
+/**
+ * Shells in hand, shown only while there are any.
+ *
+ * A chip that reads zero for the whole round is a chip nobody looks at, and the
+ * top strip is already carrying a scorecard, a balance and a rank. This one
+ * turns up when you pick a shell up and goes away when you hand them over,
+ * which is exactly the window in which the number matters.
+ *
+ * The daily figure sits alongside it because the two are only useful together:
+ * eight in hand means one thing when Shellman will take ten more and another
+ * when he is done for the day.
+ */
+function shellChip() {
+  const held = shellsCarried()
+  if (held <= 0) return null
+
+  const left = Math.max(0, SHELLS.dailyLimit - shellsToday())
+
+  return (
+    <UiEntity
+      uiTransform={{
+        width: 150,
+        height: 62,
+        margin: { left: 10 },
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: { left: 16, right: 16 }
+      }}
+      uiBackground={panel()}
+    >
+      <Label
+        value={left > 0 ? 'SHELLS' : 'SHELLS*'}
+        fontSize={16}
+        color={DIM}
+        uiTransform={{ width: 72, height: 30 }}
+        textAlign="middle-left"
+      />
+      <Bold
+        value={`${held}`}
+        fontSize={24}
+        color={left > 0 ? GOLD : DIM}
+        outline={SHADOW}
+        spread={1}
+        width={46}
+        height={30}
+        textAlign="middle-right"
+      />
+    </UiEntity>
+  )
+}
+
+/**
+ * Coconuts in hand, on the same terms as the shells.
+ *
+ * Deliberately the same chip rather than a shared one that switches: they are
+ * two separate errands with two separate daily limits, and somebody walking
+ * back from the palms with a pocket of each wants to see both numbers rather
+ * than watch one label change.
+ */
+function coconutChip() {
+  const held = coconutsCarried()
+  if (held <= 0) return null
+
+  const left = Math.max(0, COCONUTS.dailyLimit - coconutsToday())
+
+  return (
+    <UiEntity
+      uiTransform={{
+        width: 176,
+        height: 62,
+        margin: { left: 10 },
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: { left: 16, right: 16 }
+      }}
+      uiBackground={panel()}
+    >
+      <Label
+        value={left > 0 ? 'COCONUTS' : 'COCONUTS*'}
+        fontSize={16}
+        color={DIM}
+        uiTransform={{ width: 98, height: 30 }}
+        textAlign="middle-left"
+      />
+      <Bold
+        value={`${held}`}
+        fontSize={24}
+        color={left > 0 ? GOLD : DIM}
+        outline={SHADOW}
+        spread={1}
+        width={46}
+        height={30}
+        textAlign="middle-right"
+      />
+    </UiEntity>
+  )
+}
+
+/**
+ * How long is left on a pina colada.
+ *
+ * The only countdown in the scene, and the only thing anybody buys that runs
+ * out — which is exactly why it needs saying. Minutes and seconds rather than
+ * a bar: a bar answers "roughly how much" and the useful question here is
+ * whether there is time to get to the ninth.
+ *
+ * Turns amber under the last thirty seconds, since that is the point at which
+ * the answer changes from "plenty" to "go now".
+ */
+function drinkChip() {
+  if (!drinkIsUp()) return null
+
+  const left = Math.max(0, Math.ceil(drinkLeft()))
+  const mm = Math.floor(left / 60)
+  const ss = left % 60
+  const ending = left <= 30
+
+  return (
+    <UiEntity
+      uiTransform={{
+        width: 168,
+        height: 62,
+        margin: { left: 10 },
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: { left: 16, right: 16 }
+      }}
+      uiBackground={panel()}
+    >
+      <Label
+        value="COLADA"
+        fontSize={16}
+        color={DIM}
+        uiTransform={{ width: 82, height: 30 }}
+        textAlign="middle-left"
+      />
+      <Bold
+        value={`${mm}:${ss < 10 ? '0' : ''}${ss}`}
+        fontSize={24}
+        color={ending ? BAD : GOOD}
+        outline={SHADOW}
+        spread={1}
+        width={56}
+        height={30}
+        textAlign="middle-right"
+      />
+    </UiEntity>
+  )
+}
+
+/**
+ * The metal detector's read-out, shown only while it is out.
+ *
+ * A bar rather than a number, because a number would be a distance and a
+ * distance is a map. The bar says warmer or colder and nothing else, which is
+ * the entire game of sweeping — you learn whether the last two steps helped,
+ * not where the thing is.
+ *
+ * It turns gold and says DIG when you are stood on one, since at that point the
+ * guessing is over and the only question left is whether you noticed.
+ */
+function detectorChip() {
+  if (!detectorIsOut()) return null
+
+  const heat = detectorHeat()
+  const on = overFind()
+  const carried = scrapCarried()
+  const something = detectorNearest() < Number.POSITIVE_INFINITY
+
+  return (
+    <UiEntity
+      uiTransform={{
+        width: 190,
+        height: 62,
+        margin: { left: 10 },
+        flexDirection: 'column',
+        justifyContent: 'center',
+        padding: { left: 16, right: 16, top: 8, bottom: 8 }
+      }}
+      uiBackground={panel()}
+    >
+      <UiEntity uiTransform={{ width: '100%', height: 26, flexDirection: 'row', alignItems: 'center' }}>
+        <Label
+          value={on ? 'DIG  (E)' : something ? 'SWEEPING' : 'NOTHING'}
+          fontSize={15}
+          color={on ? GOOD : DIM}
+          uiTransform={{ width: 118, height: 26 }}
+          textAlign="middle-left"
+        />
+        <Label
+          value={`${carried}`}
+          fontSize={17}
+          color={GOLD}
+          uiTransform={{ width: 40, height: 26 }}
+          textAlign="middle-right"
+        />
+      </UiEntity>
+
+      <UiEntity uiTransform={{ width: '100%', height: 6 }} uiBackground={{ color: SHADOW }}>
+        <UiEntity
+          uiTransform={{ width: `${Math.round(heat * 100)}%`, height: 6 }}
+          uiBackground={{ color: on ? GOOD : GOLD }}
+        />
+      </UiEntity>
+    </UiEntity>
+  )
+}
+
+/**
+ * The quest panel: open or shut, and which tab.
+ *
+ * Kept here rather than in quests.ts because nothing outside the HUD opens it.
+ * The shop's state lives in shop.ts for the opposite reason — an NPC opens
+ * that one, so it needs a handle the dialogue can reach.
+ */
+type QuestTab = 'active' | 'available' | 'done'
+let questsOpen = false
+let questTab: QuestTab = 'active'
+
+/**
+ * The quest button, opposite the address prompt.
+ *
+ * This replaces a strip of chips that sat under the top bar listing every
+ * running quest at once. That was fine with two quests and unreadable with
+ * seven — and by the time Sally and Coconutty were both handing work out,
+ * seven was ordinary. A wall of text you cannot dismiss is worse than no
+ * tracker at all.
+ *
+ * What survives of it is the count on the button, which is the part anybody
+ * was actually reading: how many are running, and whether one is ready to hand
+ * in. The button goes gold and says READY when something is, because that is
+ * the only state that wants you to do something.
+ */
+function questButton(alone: boolean) {
+  const { active } = questsByStatus()
+  const ready = active.filter((a) => a.status === 'complete').length
+  const label =
+    ready > 0
+      ? `QUESTS (${ready} COMPLETED)`
+      : active.length > 0
+        ? `QUESTS  ${active.length}`
+        : 'QUESTS'
+
+  return (
+    <UiEntity
+      uiTransform={{
+        width: QUEST_BUTTON_W,
+        height: 52,
+        // The gap belongs between this and whatever is beside it. With nothing
+        // beside it, the gap is what stops it being centred.
+        margin: { left: alone ? 0 : 14 },
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
+      uiBackground={button(questsOpen ? PICKED : undefined)}
+      onMouseDown={() => {
+        questsOpen = !questsOpen
+      }}
+    >
+      <Bold
+        value={label}
+        fontSize={16}
+        color={ready > 0 ? GOOD : GOLD}
+        outline={SHADOW}
+        spread={1}
+        width={QUEST_BUTTON_W - 20}
+        height={28}
+      />
+    </UiEntity>
+  )
+}
+
+/**
+ * Fixed, because the opposite side of the prompt reserves the same width.
+ *
+ * 250 rather than 190. "QUESTS (1 COMPLETED)" is twenty characters and needed
+ * about 188 pixels at the old size, against 170 of usable width — so it
+ * wrapped onto a second line and spilled out of the frame. Sized off the
+ * longest thing the button ever says rather than off the shortest, with the
+ * text a couple of points down as well; "QUESTS (12 COMPLETED)" is the true
+ * worst case and lands around 175 of the 230 now available.
+ */
+const QUEST_BUTTON_W = 250
+
+/**
+ * The most rows the panel will draw.
+ *
+ * There are fifteen quests in the scene and the explorer's UI has no scrolling
+ * to offer, so a COMPLETED tab with all of them on it came out 1116 pixels tall
+ * against a 1080 canvas — the bottom rows simply off the screen, with nothing
+ * saying so. Eight fits with room to spare and the overflow is stated in a line
+ * underneath rather than silently dropped.
+ */
+const MAX_QUEST_ROWS = 8
+
+function questTabButton(tab: QuestTab, label: string, count: number) {
+  const here = questTab === tab
+  return (
+    <UiEntity
+      uiTransform={{ width: 176, height: 40, margin: { right: 8 }, alignItems: 'center', justifyContent: 'center' }}
+      uiBackground={button(here ? PICKED : undefined)}
+      onMouseDown={() => {
+        questTab = tab
+      }}
+    >
+      <Label
+        value={count > 0 ? `${label}  ${count}` : label}
+        fontSize={17}
+        color={here ? GOLD : DIM}
+        uiTransform={{ width: 166, height: 26 }}
+        textAlign="middle-center"
+      />
+    </UiEntity>
+  )
+}
+
+/**
+ * One quest, as a row in the panel.
+ *
+ * Read-only on purpose. Taking a quest and handing one in stay with the
+ * character who gave it — that conversation is the only reason the characters
+ * exist, and a panel that let you collect a reward from anywhere on the island
+ * would quietly delete them. So a finished quest says who to go and see, and
+ * an offered one says who is holding it.
+ */
+function questRow(
+  key: string,
+  name: string,
+  detail: string,
+  right: string,
+  rightColour: Color4,
+  nameColour: Color4
+) {
+  return (
+    <UiEntity
+      key={key}
+      uiTransform={{
+        width: '100%',
+        height: 62,
+        margin: { bottom: 6 },
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: { left: 16, right: 16 }
+      }}
+      uiBackground={button()}
+    >
+      {/*
+        430 and 246 rather than 500 and 208, and the two now add up.
+        The panel is 760 wide with 26 of padding each side and the row takes
+        another 16 each side, which leaves 676 — the old pair came to 708, so
+        the right-hand column had been hanging 32 pixels off the end of every
+        row since it was written. Widening it was needed anyway: "Speak to Cave
+        Explorer Sally" is the longest thing that column ever has to say.
+      */}
+      <UiEntity uiTransform={{ width: 430, height: 52, flexDirection: 'column', justifyContent: 'center' }}>
+        <Label value={name} fontSize={19} color={nameColour} uiTransform={{ width: 430, height: 26 }} textAlign="middle-left" />
+        <Label value={detail} fontSize={15} color={DIM} uiTransform={{ width: 430, height: 22 }} textAlign="middle-left" />
+      </UiEntity>
+      <Label
+        value={right}
+        fontSize={16}
+        color={rightColour}
+        uiTransform={{ width: 246, height: 30 }}
+        textAlign="middle-right"
+      />
+    </UiEntity>
+  )
+}
+
+/**
+ * The panel itself.
+ *
+ * Same furniture as the shop — a panel, a title row, a row of tabs, a list —
+ * because they are the same kind of thing and a scene with two different
+ * full-screen list layouts is a scene that looks like two people built it.
+ *
+ * Height is worked out from the longest tab rather than the tab showing, so
+ * the panel does not jump about as you click between them.
+ */
+function questPanel() {
+  // Shut by anything that takes the screen for itself. A conversation and a
+  // full-screen list at once is two things wanting the same attention, and the
+  // flag is cleared rather than just the drawing skipped so the button does not
+  // sit there lit up over a panel nobody can see.
+  if (currentNode() || shopOpen()) questsOpen = false
+  if (!questsOpen) return null
+
+  const { active, available, done } = questsByStatus()
+  const tallest = Math.min(
+    MAX_QUEST_ROWS,
+    Math.max(active.length, available.length, done.length, 1)
+  )
+  // How many this tab is not showing, said out loud below the list.
+  const shown = questTab === 'active' ? active.length : questTab === 'available' ? available.length : done.length
+  const hidden = Math.max(0, shown - MAX_QUEST_ROWS)
+
+  const rows =
+    questTab === 'active'
+      ? active.slice(0, MAX_QUEST_ROWS).map(({ quest, done: got, status }) =>
+          questRow(
+            quest.id,
+            quest.name,
+            // A finished quest stops describing the job and starts describing
+            // the errand. The objective is answered by then; who to go and see
+            // is the only thing left, so it takes the wide line and the count
+            // gives way to what collecting is worth.
+            status === 'complete'
+              ? `Completed — Speak to ${giverName(quest.giver)}`
+              : quest.objective,
+            status === 'complete' ? `+${quest.reward} ${POINTS.short}` : `${got} / ${quest.target}`,
+            status === 'complete' ? GOOD : GOLD,
+            status === 'complete' ? GOOD : CREAM
+          )
+        )
+      : questTab === 'available'
+        ? available.slice(0, MAX_QUEST_ROWS).map((quest) =>
+            questRow(quest.id, quest.name, quest.objective, `Speak to ${giverName(quest.giver)}`, GOLD, CREAM)
+          )
+        : done.slice(0, MAX_QUEST_ROWS).map((quest) =>
+            questRow(quest.id, quest.name, quest.objective, `+${quest.reward} ${POINTS.short}`, DIM, DIM)
+          )
+
+  const nothing =
+    questTab === 'active'
+      ? 'Nothing on the go. Have a word with somebody.'
+      : questTab === 'available'
+        ? 'Nothing on offer. Finish what you have started.'
+        : 'Nothing finished yet.'
 
   return (
     <UiEntity
       uiTransform={{
         positionType: 'absolute',
-        position: { top: 96 },
+        position: { top: 0 },
         width: '100%',
-        height: 30 * running.length,
+        height: '100%',
         flexDirection: 'column',
-        alignItems: 'center'
+        alignItems: 'center',
+        justifyContent: 'center'
       }}
     >
-      {running.map(({ quest, done, status }) => (
-        <UiEntity
-          key={quest.id}
-          uiTransform={{
-            width: 470,
-            height: 28,
-            margin: { bottom: 2 },
-            flexDirection: 'row',
-            alignItems: 'center',
-            padding: { left: 30, right: 30 }
-          }}
-          uiBackground={chip()}
-        >
+      <UiEntity
+        uiTransform={{
+          width: 760,
+          height: 96 + tallest * 68 + (hidden > 0 ? 28 : 0),
+          flexDirection: 'column',
+          padding: { top: 22, bottom: 22, left: 26, right: 26 }
+        }}
+        uiBackground={panel()}
+      >
+        <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', alignItems: 'center' }}>
+          <Bold value="QUESTS" fontSize={20} color={GOLD} outline={SHADOW} spread={1} width={300} height={30} textAlign="middle-left" />
           <Label
-            value={quest.objective}
+            value="Click QUESTS again to close"
             fontSize={15}
-            color={status === 'complete' ? GOLD : CREAM}
-            uiTransform={{ width: 330, height: 22 }}
-            textAlign="middle-left"
-          />
-          <Label
-            value={status === 'complete' ? 'go and see him' : `${done}/${quest.target}`}
-            fontSize={15}
-            color={status === 'complete' ? GOLD : DIM}
-            uiTransform={{ width: 104, height: 22 }}
+            color={DIM}
+            uiTransform={{ width: 424, height: 30 }}
             textAlign="middle-right"
           />
         </UiEntity>
-      ))}
+
+        <UiEntity uiTransform={{ width: '100%', height: 48, flexDirection: 'row', alignItems: 'center' }}>
+          {questTabButton('active', 'ACTIVE', active.length)}
+          {questTabButton('available', 'AVAILABLE', available.length)}
+          {questTabButton('done', 'COMPLETED', done.length)}
+        </UiEntity>
+
+        {rows.length > 0 ? (
+          rows
+        ) : (
+          <Label
+            value={nothing}
+            fontSize={16}
+            color={DIM}
+            uiTransform={{ width: '100%', height: 62 }}
+            textAlign="middle-center"
+          />
+        )}
+
+        {hidden > 0 ? (
+          <Label
+            value={`and ${hidden} more`}
+            fontSize={15}
+            color={DIM}
+            uiTransform={{ width: '100%', height: 26 }}
+            textAlign="middle-center"
+          />
+        ) : null}
+      </UiEntity>
+    </UiEntity>
+  )
+}
+
+/**
+ * The level-up banner.
+ *
+ * Bigger than a toast and in the middle of the screen, because it happens a
+ * handful of times in a player's whole history with the scene and the rest of
+ * the callouts happen several times a round. Sharing the toast channel would
+ * let "LEVEL 12" be wiped a second later by a note about shells.
+ *
+ * Three lines at most, and the third only when there is something to say. The
+ * rank line is the promotion; the club line is the reason to walk to the
+ * shack. A level that stays inside the same band gets neither, and says so by
+ * simply being shorter.
+ */
+function levelUp() {
+  const up = levelUpBanner()
+  if (!up) return null
+
+  const under = up.newRank
+    ? `${up.rank.toUpperCase()}${up.unlocked ? `  ·  ${up.unlocked} on the shelf` : ''}`
+    : up.rank.toUpperCase()
+
+  return (
+    <UiEntity
+      uiTransform={{
+        positionType: 'absolute',
+        // 38%, not 34%. The toast sits at 24% and is 128 tall, so it runs to
+        // 387 on a 1080 canvas; a banner starting at 367 overlapped it by 20
+        // pixels, and a round that finishes and levels you up at the same
+        // moment shows both.
+        position: { top: '38%' },
+        width: '100%',
+        height: 190,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
+    >
+      <UiEntity
+        uiTransform={{
+          width: 760,
+          height: 168,
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: { top: 18, bottom: 18, left: 24, right: 24 }
+        }}
+        uiBackground={panel()}
+      >
+        <Bold
+          value={up.gained > 1 ? `LEVEL ${up.level}  (+${up.gained})` : `LEVEL ${up.level}`}
+          fontSize={44}
+          color={GOLD}
+          outline={SHADOW}
+          spread={3}
+          width={700}
+          height={54}
+        />
+        <Bold
+          value={under}
+          fontSize={20}
+          color={up.newRank ? GOOD : CREAM}
+          outline={SHADOW}
+          spread={1}
+          width={700}
+          height={30}
+        />
+        {up.bonus > 0 ? (
+          <Label
+            value={`+${up.bonus} ${POINTS.short}`}
+            fontSize={22}
+            color={GOOD}
+            uiTransform={{ width: 700, height: 32 }}
+            textAlign="middle-center"
+          />
+        ) : (
+          <Label
+            value="Connect a wallet to be paid for these"
+            fontSize={15}
+            color={DIM}
+            uiTransform={{ width: 700, height: 32 }}
+            textAlign="middle-center"
+          />
+        )}
+      </UiEntity>
     </UiEntity>
   )
 }
@@ -170,6 +762,24 @@ function questTracker() {
 // ---------------------------------------------------------------------------
 // Inventory
 // ---------------------------------------------------------------------------
+
+/**
+ * What a locked row says on the right.
+ *
+ * Level and pending rows come straight from the catalogue, but a quest row
+ * used to read "Earned, not bought", which says what it is not rather than
+ * what to do — it reads like something already earned and still waiting to be
+ * paid for. Naming the quest turns it into an instruction: the same words are
+ * on the quest board and in the giver's Quests tab, so there is one string to
+ * go looking for rather than a riddle.
+ */
+function lockedLabel(item: Item): string {
+  if (item.unlock.kind === 'quest') {
+    const quest = questById(item.unlock.quest)
+    return quest ? `Quest: ${quest.name}` : 'Quest reward'
+  }
+  return unlockLabel(item)
+}
 
 /**
  * The shop, laid out as an inventory rather than read aloud.
@@ -186,9 +796,19 @@ function questTracker() {
 function itemRow(item: Item, canAfford: boolean) {
   const owned = isOwned(item.id)
   const worn = equippedId(item.kind) === item.id
+  // Locked rows are shown rather than hidden. Half the point of a ladder is
+  // seeing the rung above you, and a shop that silently grows is a shop nobody
+  // knows they are working towards.
+  const unlocked = isUnlocked(item, playerStanding().level, claimedKeys())
 
-  const action = worn ? 'HOLDING' : owned ? 'EQUIP' : canAfford ? `${item.price}` : `${item.price}`
-  const actionColour = worn ? GOOD : owned ? GOLD : canAfford ? GOLD : BAD
+  const action = !unlocked
+    ? lockedLabel(item)
+    : worn
+      ? 'HOLDING'
+      : owned
+        ? 'EQUIP'
+        : `${item.price}`
+  const actionColour = !unlocked ? DIM : worn ? GOOD : owned ? GOLD : canAfford ? GOLD : BAD
 
   return (
     <UiEntity
@@ -202,13 +822,19 @@ function itemRow(item: Item, canAfford: boolean) {
         padding: { left: 16, right: 16 }
       }}
       uiBackground={button(worn ? PICKED : undefined)}
-      onMouseDown={() => (owned ? equip(item.id) : buy(item.id))}
+      onMouseDown={() => {
+        // A locked row is inert. The server refuses it as well — this only
+        // saves the round trip and the refusal toast.
+        if (!unlocked) return
+        if (owned) equip(item.id)
+        else buy(item.id)
+      }}
     >
       <UiEntity uiTransform={{ width: 560, height: 52, flexDirection: 'column', justifyContent: 'center' }}>
         <Label
           value={item.name}
           fontSize={19}
-          color={owned ? CREAM : DIM}
+          color={owned && unlocked ? CREAM : DIM}
           uiTransform={{ width: 560, height: 26 }}
           textAlign="middle-left"
         />
@@ -287,7 +913,7 @@ function inventory() {
       </UiEntity>
 
       <Label
-        value="F  to close"
+        value="Walk away to close"
         fontSize={15}
         color={DIM}
         uiTransform={{ width: 760, height: 24 }}
@@ -406,7 +1032,7 @@ function dialog() {
       <UiEntity
         uiTransform={{
           width: 900,
-          height: 236,
+          height: 262,
           flexDirection: 'column',
           padding: { top: 24, bottom: 24, left: 30, right: 30 }
         }}
@@ -423,12 +1049,23 @@ function dialog() {
         {nodeChoices(node).map((c, i) => (
           <UiEntity
             key={`${i}-${c.label}`}
-            uiTransform={{ width: '100%', height: 34, margin: { top: 4 }, justifyContent: 'flex-start', alignItems: 'center' }}
+            uiTransform={{
+              width: '100%',
+              height: 38,
+              margin: { top: 4 },
+              justifyContent: 'flex-start',
+              alignItems: 'center',
+              // Real padding rather than two spaces glued to the front of the
+              // label. The row is a nine-slice frame with an 8px border, so
+              // text at zero inset sits on top of its own edge — which is what
+              // made the first character look clipped.
+              padding: { left: 18, right: 18 }
+            }}
             uiBackground={chip()}
             onMouseDown={() => choose(i)}
           >
             <Label
-              value={`  ${c.label}`}
+              value={c.label}
               fontSize={17}
               color={GOLD}
               uiTransform={{ width: '100%', height: 26 }}
@@ -438,7 +1075,7 @@ function dialog() {
         ))}
       </UiEntity>
       <Label
-        value="F  to walk away"
+        value="Walk away to close"
         fontSize={15}
         color={DIM}
         uiTransform={{ width: 900, height: 24 }}
@@ -491,8 +1128,27 @@ function powerColour(p: number): Color4 {
   return Color4.create(0.95, 0.9 - 0.55 * k, 0.35 - 0.3 * k, 1)
 }
 
-function prompt(phase: string): string {
-  if (phase === 'walking') return 'Walk up to your ball'
+/**
+ * What to press, or nothing at all.
+ *
+ * Deliberately not a pure function of the phase any more. 'walking' is the
+ * resting state of the whole scene — you are in it from the moment you load,
+ * and you go back to it after every shot — so keying the banner off the phase
+ * alone left "Walk up to your ball" on screen permanently, including while
+ * picking coconuts on the far side of the island. It reads as a fault rather
+ * than as help.
+ *
+ * Two things switch it off. Being nowhere near the ball, because then it is
+ * not advice about anything you are doing; and having the detector out,
+ * because that is unambiguously a different activity and the club is not even
+ * in your hand. 'ready' and 'address' need no distance test — you cannot be in
+ * either from more than SHOT.reach away.
+ */
+function prompt(phase: string, distanceToBall: number): string {
+  if (detectorIsOut()) return ''
+  if (phase === 'walking') {
+    return distanceToBall <= SHOT.promptRange ? 'Walk up to your ball' : ''
+  }
   if (phase === 'ready') return 'Press  E  to address the ball'
   if (phase === 'address') return 'Look where you want it to go,  then  E'
   return ''
@@ -964,6 +1620,18 @@ const hud = () => {
   const finished = s.phase === 'finished'
   const playing = s.joined && !finished
 
+  // What the bottom band is carrying, worked out once because the layout
+  // depends on it in two places.
+  const hint = prompt(s.phase, s.distanceToBall)
+  /**
+   * True when the quest button is the only thing down there.
+   *
+   * Off the course and away from your ball there is no reset button, no meter
+   * and nothing to prompt — so the band would otherwise hold a spacer and a
+   * button and centre the pair, leaving QUESTS sitting to the right of centre.
+   */
+  const alone = !playing && s.phase !== 'swinging' && hint === ''
+
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'absolute' }}>
       {/* ---- one strip: hole, stroke, distance ---- */}
@@ -1007,6 +1675,11 @@ const hud = () => {
         <Bold value={metres(s.distanceToPin)} fontSize={20} color={GOLD} width={84} height={40} textAlign="middle-right" />
       </UiEntity>
       {pointsChip()}
+      {levelChip()}
+      {shellChip()}
+      {coconutChip()}
+      {drinkChip()}
+      {detectorChip()}
       </UiEntity>
       ) : null}
 
@@ -1056,6 +1729,11 @@ const hud = () => {
         />
       </UiEntity>
       {pointsChip()}
+      {levelChip()}
+      {shellChip()}
+      {coconutChip()}
+      {drinkChip()}
+      {detectorChip()}
       </UiEntity>
       ) : null}
 
@@ -1116,8 +1794,6 @@ const hud = () => {
         />
       </UiEntity>
       ) : null}
-
-      {questTracker()}
 
       {leaderboard()}
 
@@ -1208,10 +1884,26 @@ const hud = () => {
             justifyContent: 'center'
           }}
         >
-          {playing ? (
+          {/*
+            One band, three slots: reset on the left, the prompt or the meter in
+            the middle, quests on the right.
+
+            The left slot keeps its width when there is no reset button to put
+            in it, so the middle stays the middle whether you are signed on or
+            not — the quest button is always there, and without a matching space
+            opposite it everything drifts left.
+
+            Except when quests is the only thing in the band. Walking about the
+            island off the course, there is no reset button and nothing to
+            prompt, so the row held one spacer and one button and centred the
+            pair — which put QUESTS half a spacer to the right of centre and
+            looked like a mistake, because it was one. With nothing to balance
+            against, the spacer goes and the button centres on its own.
+          */}
+          {alone ? null : playing ? (
             <UiEntity
               uiTransform={{
-                width: 190,
+                width: QUEST_BUTTON_W,
                 height: 52,
                 margin: { right: 14 },
                 alignItems: 'center',
@@ -1220,19 +1912,21 @@ const hud = () => {
               uiBackground={panel()}
               onMouseDown={() => game.resetBall()}
             >
-              <Bold value="RESET BALL" fontSize={18} color={GOLD} outline={SHADOW} spread={1} width={170} height={28} />
+              <Bold value="RESET BALL" fontSize={18} color={GOLD} outline={SHADOW} spread={1} width={QUEST_BUTTON_W - 20} height={28} />
             </UiEntity>
-          ) : null}
+          ) : (
+            <UiEntity uiTransform={{ width: QUEST_BUTTON_W + 14, height: 52 }} />
+          )}
 
           {s.phase === 'swinging' ? (
             meter()
-          ) : prompt(s.phase) ? (
+          ) : hint ? (
             <UiEntity
               uiTransform={{ width: 480, height: 46, alignItems: 'center', justifyContent: 'center' }}
               uiBackground={chip()}
             >
               <Label
-                value={prompt(s.phase)}
+                value={hint}
                 fontSize={18}
                 color={s.phase === 'address' ? GOLD : CREAM}
                 uiTransform={{ width: 430, height: 28 }}
@@ -1241,13 +1935,22 @@ const hud = () => {
             </UiEntity>
           ) : null}
 
-          {playing ? <UiEntity uiTransform={{ width: 204, height: 52 }} /> : null}
+          {questButton(alone)}
         </UiEntity>
       )}
 
       {inventory()}
 
+      {questPanel()}
+
       {adminPanel()}
+
+      {/*
+        Last, so nothing draws over it. Later siblings sit on top, and the shop
+        and the quest panel are both full-screen — a level-up that arrived while
+        one was open would otherwise happen behind it.
+      */}
+      {levelUp()}
     </UiEntity>
   )
 }

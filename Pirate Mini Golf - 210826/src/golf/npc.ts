@@ -4,12 +4,15 @@ import {
   engine,
   Entity,
   InputAction,
+  MainCamera,
   MeshCollider,
   pointerEventsSystem,
-  Transform
+  Transform,
+  VirtualCamera
 } from '@dcl/sdk/ecs'
 import { Color3, Quaternion, Vector3 } from '@dcl/sdk/math'
 import { NPC_LOOK } from './config'
+import { giveVoice, setupVoice, startTalking, stopTalking } from './voice'
 
 /**
  * Characters you can talk to.
@@ -81,6 +84,28 @@ export type NpcSpec = {
   idleEmoteInterval: number
   talkEmote: string
   talkEmoteInterval: number
+  /**
+   * How this character sounds.
+   *
+   * pitch: 1 is the clip as recorded. Below is bigger and slower, above is
+   * smaller and quicker — pitch and speed are the same knob, so a low voice is
+   * also an unhurried one.
+   *
+   * wobble: how far the pitch moves from clip to clip. This is what separates
+   * a flat character from an animated one, and it does more work than the
+   * pitch does: Shellman at 0.015 sounds like somebody reciting, Sally at 0.13
+   * sounds like somebody who cannot get it out fast enough.
+   *
+   * gapMin/gapMax: the breath between clips. A character who barely pauses and
+   * one who leaves half a second between every phrase read as different people
+   * before you have noticed either of their pitches.
+   */
+  voice: {
+    pitch: number
+    wobble: number
+    gapMin: number
+    gapMax: number
+  }
 }
 
 type Npc = {
@@ -90,15 +115,40 @@ type Npc = {
   yaw: number
   emoteClock: number
   emoteStamp: number
+  /**
+   * Ended this conversation while still stood next to them.
+   *
+   * Without it, walking up opens the dialogue, closing it opens it again on the
+   * very next frame, and you cannot get away from the poor man without running.
+   * Cleared when you leave, so coming back starts a fresh conversation.
+   */
+  dismissed: boolean
 }
 
 const npcs: Npc[] = []
 
 /** Whoever is currently being talked to, and which node is on screen. */
 let active: Npc | null = null
+
+/**
+ * The camera that holds the view still. One, reused — creating one per
+ * conversation would mean the explorer blending from a camera that no longer
+ * exists when one ends.
+ */
+let convoCamera: Entity | undefined
 let node: string | null = null
 
+/**
+ * Builds the conversation camera. Called once, before any character exists.
+ */
+export function setupNpcCamera(): void {
+  if (!NPC_LOOK.camera.enabled) return
+  convoCamera = engine.addEntity()
+  Transform.create(convoCamera, { position: Vector3.Zero() })
+}
+
 export function createNpc(spec: NpcSpec, dialog: Dialog): void {
+  if (!convoCamera) setupNpcCamera()
   const avatar = engine.addEntity()
   Transform.create(avatar, {
     position: Vector3.create(spec.position.x, spec.position.y, spec.position.z),
@@ -118,6 +168,9 @@ export function createNpc(spec: NpcSpec, dialog: Dialog): void {
     expressionTriggerTimestamp: 0
   })
 
+  setupVoice()
+  giveVoice(spec.id, spec.position)
+
   const hitbox = engine.addEntity()
   MeshCollider.setBox(hitbox, ColliderLayer.CL_POINTER)
   Transform.create(hitbox, {
@@ -132,7 +185,8 @@ export function createNpc(spec: NpcSpec, dialog: Dialog): void {
     dialog,
     yaw: spec.facingDegrees,
     emoteClock: 0,
-    emoteStamp: 0
+    emoteStamp: 0,
+    dismissed: false
   }
   npcs.push(npc)
 
@@ -145,7 +199,13 @@ export function createNpc(spec: NpcSpec, dialog: Dialog): void {
         maxDistance: NPC_LOOK.reach
       }
     },
-    () => openWith(npc, 'start')
+    () => {
+      // Walking up already opens this. The click is only still here for the
+      // case where somebody is stood just outside talkRange and reaches in —
+      // and it must not restart a conversation that is already running, or a
+      // stray click sends you back to the top of the tree.
+      if (active !== npc) openWith(npc, 'start')
+    }
   )
 }
 
@@ -164,18 +224,104 @@ export function speakerName(): string {
   return active?.spec.name ?? ''
 }
 
+/**
+ * How far the player is from a given character, by id.
+ *
+ * Exported so things that are anchored to a character but are not the
+ * conversation — Salt's shop, most obviously — can close themselves when you
+ * walk off. The shop cannot rely on the dialogue for that: it is opened by a
+ * choice that ends the conversation, so by the time you leave there is nothing
+ * left to close.
+ *
+ * Infinity for an id that does not exist, so a caller that mistypes one gets
+ * "far away" rather than "right here".
+ */
+export function distanceToNpc(id: string): number {
+  const npc = npcs.find((n) => n.spec.id === id)
+  if (!npc) return Number.POSITIVE_INFINITY
+  const player = Transform.getOrNull(engine.PlayerEntity)
+  if (!player) return Number.POSITIVE_INFINITY
+  const dx = player.position.x - npc.spec.position.x
+  const dz = player.position.z - npc.spec.position.z
+  return Math.sqrt(dx * dx + dz * dz)
+}
+
 function openWith(npc: Npc, at: string): void {
   if (!npc.dialog[at]) return
+  // Whoever was mid-sentence stops being mid-sentence. Walking from one
+  // character straight to another otherwise leaves the first one burbling over
+  // the top of the second.
   if (active && active !== npc) setTalking(active, false)
   active = npc
   node = at
   setTalking(npc, true)
+  // Starts them talking and keeps them talking. startTalking silences whoever
+  // was mid-clip first, so walking from one character straight to another does
+  // not leave the first one burbling over the second.
+  startTalking(npc.spec.id, npc.spec.voice)
+  lockView()
+}
+
+/**
+ * Holds the view still for the length of a conversation.
+ *
+ * Copies wherever the player's camera already is and parks a scene camera
+ * there. No reframing, no look-at, no move — the picture simply stops
+ * responding to the mouse until the conversation ends, so clicking through
+ * options does not swing the view about.
+ *
+ * The rotation is copied as well as the position, which is what makes it a
+ * freeze rather than a cut: without it the scene camera would adopt its own
+ * default facing and the view would jump at exactly the moment it was supposed
+ * to settle.
+ */
+function lockView(): void {
+  if (!NPC_LOOK.camera.enabled || !convoCamera) return
+
+  const from = Transform.getOrNull(engine.CameraEntity)
+  if (!from) return
+
+  Transform.createOrReplace(convoCamera, {
+    position: Vector3.create(from.position.x, from.position.y, from.position.z),
+    rotation: Quaternion.create(from.rotation.x, from.rotation.y, from.rotation.z, from.rotation.w)
+  })
+
+  VirtualCamera.createOrReplace(convoCamera, {
+    defaultTransition: {
+      transitionMode: { $case: 'time', time: NPC_LOOK.camera.transitionSeconds }
+    }
+  })
+
+  MainCamera.createOrReplace(engine.CameraEntity, { virtualCameraEntity: convoCamera })
+}
+
+/** Gives the view back to the player. */
+function release(): void {
+  if (!NPC_LOOK.camera.enabled) return
+  // Cleared rather than removed: removing MainCamera outright has the explorer
+  // cut instead of blending, and the transition is half of why this reads as a
+  // conversation rather than a jump.
+  MainCamera.createOrReplace(engine.CameraEntity, { virtualCameraEntity: undefined })
 }
 
 export function close(): void {
   if (active) setTalking(active, false)
+  stopTalking()
   active = null
   node = null
+  release()
+}
+
+/**
+ * Ends the conversation and does not let it restart until you walk away.
+ *
+ * What F does, and what choosing a parting line does. Plain close() is for
+ * ending it because you have left — this one is for ending it on purpose while
+ * still stood there.
+ */
+export function dismiss(): void {
+  if (active) active.dismissed = true
+  close()
 }
 
 /** Picks the nth choice on the current node. */
@@ -184,8 +330,16 @@ export function choose(index: number): void {
   if (!current || !active) return
   const choice = nodeChoices(current)[index]
   if (!choice) return
+  const npc = active
   choice.act?.()
-  if (!choice.goto || !active.dialog[choice.goto]) close()
+  // A choice with nowhere to go is a goodbye, so treat it as one: it has to
+  // suppress the walk-up trigger too, or the parting line reopens the
+  // conversation before it has finished closing.
+  if (!choice.goto || !npc.dialog[choice.goto]) dismiss()
+  // Deliberately does not touch the voice. They are already talking and go on
+  // talking until you leave — clicking through four options is one
+  // conversation, and restarting the clip at every click would make it stutter
+  // rather than speak.
   else node = choice.goto
 }
 
@@ -212,11 +366,18 @@ export function updateNpcs(dt: number): void {
   const player = Transform.getOrNull(engine.PlayerEntity)
 
   for (const npc of npcs) {
+    let distance = Number.POSITIVE_INFINITY
+    if (player) {
+      const dx = player.position.x - npc.spec.position.x
+      const dz = player.position.z - npc.spec.position.z
+      distance = Math.sqrt(dx * dx + dz * dz)
+    }
+
     const t = Transform.getMutableOrNull(npc.avatar)
     if (t && player && NPC_LOOK.turnToPlayer) {
       const dx = player.position.x - npc.spec.position.x
       const dz = player.position.z - npc.spec.position.z
-      const near = Math.sqrt(dx * dx + dz * dz) <= NPC_LOOK.noticeRange
+      const near = distance <= NPC_LOOK.noticeRange
       const want = near ? (Math.atan2(dx, dz) * 180) / Math.PI : npc.spec.facingDegrees
 
       // Shortest way round, so nobody takes the long way to turn 10 degrees.
@@ -225,6 +386,21 @@ export function updateNpcs(dt: number): void {
       if (Math.abs(delta) > step) delta = Math.sign(delta) * step
       npc.yaw = (npc.yaw + delta + 360) % 360
       t.rotation = Quaternion.fromEulerDegrees(0, npc.yaw + NPC_LOOK.modelYawOffset, 0)
+    }
+
+    // Walking up starts the conversation; walking off ends it.
+    //
+    // The two ranges are not the same number on purpose. One threshold would
+    // open and close the dialogue every frame you drifted across it, and the
+    // gap between them is what makes approaching and leaving distinct events
+    // rather than one line you keep tripping over.
+    if (distance <= NPC_LOOK.talkRange) {
+      // active must be null rather than "not this one": walking past somebody
+      // mid-conversation should not drag you out of the one you are having.
+      if (!npc.dismissed && active === null) openWith(npc, 'start')
+    } else if (distance > NPC_LOOK.leaveRange) {
+      npc.dismissed = false
+      if (active === npc) close()
     }
 
     npc.emoteClock -= dt
