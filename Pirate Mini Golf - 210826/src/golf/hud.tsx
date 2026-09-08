@@ -3245,7 +3245,7 @@ const hud = () => {
           uiTransform={{ width: 90, height: 40 }}
           textAlign="middle-center"
         />
-        <Bold value={`${s.strokes + 1}`} fontSize={30} color={s.strokes >= hole.par ? BAD : CREAM} outline={SHADOW} spread={2} width={46} height={40} textAlign="middle-right" />
+        <Bold value={`${s.strokes}`} fontSize={30} color={s.strokes >= hole.par ? BAD : CREAM} outline={SHADOW} spread={2} width={46} height={40} textAlign="middle-right" />
         <Bold value={metres(s.distanceToPin)} fontSize={20} color={GOLD} width={84} height={40} textAlign="middle-right" />
       </UiEntity>
       {pointsChip()}
