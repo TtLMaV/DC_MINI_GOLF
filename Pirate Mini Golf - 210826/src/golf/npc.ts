@@ -1,16 +1,13 @@
 import {
   AvatarShape,
-  ColliderLayer,
   engine,
   Entity,
-  InputAction,
   MainCamera,
-  MeshCollider,
-  pointerEventsSystem,
   Transform,
   VirtualCamera
 } from '@dcl/sdk/ecs'
 import { Color3, Quaternion, Vector3 } from '@dcl/sdk/math'
+import { isMobile } from '@dcl/sdk/platform'
 import { NPC_LOOK } from './config'
 import { giveVoice, setupVoice, startTalking, stopTalking } from './voice'
 
@@ -33,6 +30,67 @@ import { giveVoice, setupVoice, startTalking, stopTalking } from './voice'
  *
  * Only one conversation runs at a time — `active` is the whole of that rule.
  */
+
+/**
+ * Whether this is a phone, asked once and remembered.
+ *
+ * It lives here because the characters need it. Half of what they tell you is
+ * which key to press, and a phone has no keys — it has the buttons index.ts
+ * draws down the right-hand side, wearing the scene's own art. A tutorial that
+ * names keys the player does not have is worse than no tutorial, so the lines
+ * that name one have a phone wording as well.
+ *
+ * The answer cannot change mid-session and each dialog is built once, so the
+ * try/catch runs once and the flag is read from then on. Older explorers with
+ * no platform module fall through to desktop, which is what the scene has
+ * always assumed.
+ */
+let phone: boolean | null = null
+
+export function onPhone(): boolean {
+  if (phone === null) {
+    try {
+      phone = isMobile()
+    } catch {
+      phone = false
+    }
+  }
+  return phone
+}
+
+/**
+ * The id the nameplate sees, which is not the id the scene runs on.
+ *
+ * Decentraland draws an avatar's plate as the name in the name colour and then
+ * the last four characters of that avatar's id after it in grey. For a player
+ * that is the tail of their wallet, and it is how two people called Dave are
+ * told apart. Our characters are not wallets. The Quartermaster's id is the
+ * word 'quartermaster', so his plate reads "The Quartermaster" and then "ster"
+ * in grey, and Salt, whose id is 'shopkeeper', gets a grey "eper" that has
+ * nothing to do with his name at all.
+ *
+ * The ids cannot be changed to fix it. quests.ts finds a quest's giver by id
+ * and voice.ts keys each character's mouth on it, so 'quartermaster' has to go
+ * on being 'quartermaster' everywhere except on the plate.
+ *
+ * So the plate gets an id of its own: the real one with four blanks after it.
+ * Still unique, still stable across a session, and the four characters the
+ * client insists on drawing are four characters with nothing in them.
+ *
+ * Non-breaking spaces rather than anything cleverer, and the choice is about
+ * how it fails. Every font has this character and it draws as a space, so the
+ * worst case is that the explorer trims trailing whitespace off the id and we
+ * are back to where we started. A zero-width space would be tidier when it
+ * works and four missing-glyph boxes when the font has not got it, which is a
+ * worse plate than the one we are fixing. If this does not take, U+2800, the
+ * braille blank, is the next thing to try: not whitespace, so it survives a
+ * trim, and blank in most fonts.
+ */
+const PLATE_PAD = '\u00a0\u00a0\u00a0\u00a0'
+
+function plateId(id: string): string {
+  return id + PLATE_PAD
+}
 
 export type DialogChoice = {
   label: string
@@ -155,7 +213,7 @@ export function createNpc(spec: NpcSpec, dialog: Dialog): void {
     rotation: Quaternion.fromEulerDegrees(0, spec.facingDegrees + NPC_LOOK.modelYawOffset, 0)
   })
   AvatarShape.create(avatar, {
-    id: spec.id,
+    id: plateId(spec.id),
     name: spec.name,
     bodyShape: spec.bodyShape,
     wearables: spec.wearables,
@@ -171,14 +229,6 @@ export function createNpc(spec: NpcSpec, dialog: Dialog): void {
   setupVoice()
   giveVoice(spec.id, spec.position)
 
-  const hitbox = engine.addEntity()
-  MeshCollider.setBox(hitbox, ColliderLayer.CL_POINTER)
-  Transform.create(hitbox, {
-    position: Vector3.create(0, NPC_LOOK.hitboxHeight / 2, 0),
-    scale: Vector3.create(NPC_LOOK.hitboxWidth, NPC_LOOK.hitboxHeight, NPC_LOOK.hitboxWidth),
-    parent: avatar
-  })
-
   const npc: Npc = {
     spec,
     avatar,
@@ -190,26 +240,40 @@ export function createNpc(spec: NpcSpec, dialog: Dialog): void {
   }
   npcs.push(npc)
 
-  pointerEventsSystem.onPointerDown(
-    {
-      entity: hitbox,
-      opts: {
-        button: InputAction.IA_PRIMARY,
-        hoverText: `Talk to ${spec.name}`,
-        maxDistance: NPC_LOOK.reach
-      }
-    },
-    () => {
-      // Walking up already opens this. The click is only still here for the
-      // case where somebody is stood just outside talkRange and reaches in —
-      // and it must not restart a conversation that is already running, or a
-      // stray click sends you back to the top of the tree.
-      if (active !== npc) openWith(npc, 'start')
-    }
-  )
+  // No pointer target, and so no floating "Press E to talk to ..." over
+  // everybody's head.
+  //
+  // There used to be an invisible box on each of them you could click from six
+  // metres, which was only ever a convenience for reaching in from just outside
+  // talkRange. The label it dragged around with it was the price, and it was
+  // the wrong price: five characters stood about the island each captioning
+  // themselves at the player is a lot of furniture for a shortcut on a thing
+  // that opens by itself when you walk up.
+  //
+  // Walking up is now the whole of it. NPC_LOOK.talkRange in, leaveRange out.
 }
 
 // --- conversation ----------------------------------------------------------
+
+/**
+ * Whether a conversation may happen right now.
+ *
+ * Set by the game layer, which is the only thing that knows whether a round is
+ * on. Characters are scattered across the island and several of them stand
+ * beside greens, so without this a round is constantly interrupted by somebody
+ * saying hello and taking the controls with them.
+ *
+ * Starting is blocked, and anything already running is closed. Blocking only
+ * the start was not enough: a conversation begun while walking between holes
+ * stayed up once play resumed, which is exactly the case that prompted this.
+ * Being closed on you when you tee off is the lesser rudeness.
+ */
+let blocked = false
+
+export function blockConversations(on: boolean): void {
+  blocked = on
+  if (on && active) close()
+}
 
 export function currentNode(): DialogNode | null {
   if (!active || !node) return null
@@ -397,7 +461,7 @@ export function updateNpcs(dt: number): void {
     if (distance <= NPC_LOOK.talkRange) {
       // active must be null rather than "not this one": walking past somebody
       // mid-conversation should not drag you out of the one you are having.
-      if (!npc.dismissed && active === null) openWith(npc, 'start')
+      if (!npc.dismissed && active === null && !blocked) openWith(npc, 'start')
     } else if (distance > NPC_LOOK.leaveRange) {
       npc.dismissed = false
       if (active === npc) close()

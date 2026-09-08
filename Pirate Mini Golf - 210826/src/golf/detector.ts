@@ -83,10 +83,22 @@ sites.push({ at: -1, motor: true, cooling: 0, risen: 0, spin: Math.random() * 36
  */
 let motorAt: { x: number; y: number; z: number } | undefined
 
-/** Somewhere harmless to park the motor's model until it has a real spot. */
+/**
+ * Somewhere harmless to park the motor's model until it has a real spot.
+ *
+ * The middle of the route rather than the middle of a box, and twenty metres
+ * under it either way, so it is a long way from anything a player can stand
+ * on. It does not have to be inside the cave, only nowhere.
+ */
 function caveMiddle(): { x: number; y: number; z: number } {
-  const c = DETECTOR.cave
-  return { x: (c.minX + c.maxX) / 2, y: -20, z: (c.minZ + c.maxZ) / 2 }
+  const zones = DETECTOR.caveZones
+  let x = 0
+  let z = 0
+  for (const b of zones) {
+    x += (b.minX + b.maxX) / 2
+    z += (b.minZ + b.maxZ) / 2
+  }
+  return { x: x / zones.length, y: -20, z: z / zones.length }
 }
 
 function motorSpot(): { x: number; y: number; z: number } {
@@ -204,10 +216,25 @@ function distanceToSite(site: Site, from: { x: number; y: number; z: number }): 
  * ring you were in; a continuous rate tells you whether the last step helped,
  * which is what sweeping actually is.
  */
-/** Inside the cave box. Flat — the floor steps about and height is not the test. */
+/**
+ * Inside the cave.
+ *
+ * Flat, because the floor steps about and height is not the test.
+ *
+ * A list of rectangles rather than one box or a widened line, because the cave
+ * is neither: it is a ring of chambers round the outside of the island with
+ * the golf course in the middle of the rectangle they occupy. The list is
+ * built from the model's own collider, and the note in config.ts says how.
+ *
+ * Linear over eighty-odd boxes, once a frame, and returning on the first hit.
+ * That is a few hundred comparisons in the worst case and nothing measurable
+ * next to a single raycast, so it is left simple rather than bucketed.
+ */
 export function inCave(at: { x: number; z: number }): boolean {
-  const c = DETECTOR.cave
-  return at.x >= c.minX && at.x <= c.maxX && at.z >= c.minZ && at.z <= c.maxZ
+  for (const b of DETECTOR.caveZones) {
+    if (at.x >= b.minX && at.x <= b.maxX && at.z >= b.minZ && at.z <= b.maxZ) return true
+  }
+  return false
 }
 
 function sweep(dt: number): void {

@@ -8,9 +8,11 @@ import {
   coconuttyHasAnswered,
   coconutsToday,
   coconutsTotal,
-  handCoconuts
+  handCoconuts,
+  handJugCoconuts,
+  jugStillWants
 } from './points'
-import { addQuests, questChoices, report } from './quests'
+import { addQuests, questChoices, questIsRunning, questRemaining, report } from './quests'
 
 /**
  * What Coconutty says.
@@ -46,7 +48,7 @@ export function coconuttyDialog(): Dialog {
     const n = held()
     if (n === 0) {
       return (
-        'Nothing on you. There are six palms on this island and every one of them is dropping them faster ' +
+        "Where's my sweet sweet coconuts man, you dont seem to have any on you? There are loads of palm trees on this island and every one of them is dropping them faster " +
         'than I can pick them up, which is the only labour shortage I have ever been glad about.'
       )
     }
@@ -61,6 +63,23 @@ export function coconuttyDialog(): Dialog {
       'Off the ground, I hope. I meant that about the trees.'
     )
   }
+
+  /**
+   * How many of what you are carrying he would take for the jug.
+   *
+   * Nothing unless the quest is actually running: this is a second hand-over
+   * button beside the first, and one that appears before you have been asked
+   * for a jug is a button with no story attached to it.
+   *
+   * Counted off the quest rather than off the server's last answer, because
+   * the quest's own progress is right from the moment the ledger seeds it and
+   * the server's answer does not exist until the first hand-over. They agree
+   * afterwards; this is simply the one that is right first.
+   */
+  const forJug = () =>
+    questIsRunning('blender-vessel')
+      ? Math.min(held(), questRemaining('blender-vessel'))
+      : 0
 
   const dialog: Dialog = {
     start: {
@@ -82,6 +101,17 @@ export function coconuttyDialog(): Dialog {
           })
         }
 
+        // The jug's own line, above the daily one when both are going, because
+        // it is the one with a deadline on it — his appetite comes back
+        // tomorrow and the quest is sat there either way.
+        if (forJug() > 0) {
+          options.push({
+            label: `${forJug()} for the jug`,
+            goto: 'jug',
+            act: () => handJugCoconuts()
+          })
+        }
+
         // The bar only exists once the blender does, which is the whole point
         // of the three-part build — the reward is a shop that was not there
         // before rather than an object in a bag.
@@ -96,9 +126,35 @@ export function coconuttyDialog(): Dialog {
         options.push(...questChoices('coconutty'))
         options.push({ label: 'Why coconuts?', goto: 'why' })
         options.push({ label: 'How many have I brought you?', goto: 'tally' })
-        options.push({ label: 'I will let you get on', goto: '' })
+        options.push({ label: 'Cya later!', goto: '' })
         return options
       }
+    },
+
+    jug: {
+      /**
+       * Read fresh, like the hand-over above and for the same reason: the
+       * server answers a moment after this node is drawn.
+       */
+      /**
+       * The server's number, not the quest's, and here it is the right one:
+       * this node is read after a hand-over, so it is reporting what he
+       * actually took. Negative means he has not answered yet, which is a
+       * couple of frames and is worth saying vaguely rather than wrongly.
+       */
+      text: () => {
+        const left = jugStillWants()
+        if (left < 0) return 'He starts sorting through them, and does not look up.'
+        return left > 0
+          ? 'He turns each one over, taps it, and sets it down in a separate pile. ' +
+            `"${left} more and I have got a jug."`
+          : 'He picks through them, holds one up, and stops talking for a moment. ' +
+            '"That is the one. That is a jug."'
+      },
+      choices: [
+        { label: 'Why a coconut?', goto: 'building' },
+        { label: 'Right', goto: '' }
+      ]
     },
 
     handed: {
@@ -114,7 +170,7 @@ export function coconuttyDialog(): Dialog {
       text: () =>
         coconuttyHasAnswered()
           ? 'He takes them two at a time, knocks each one against the next, and listens. ' +
-            '"That one is full," he says, about one of them. He does not say which.'
+            '"That one is full," he says. Not specifing which.'
           : 'He puts his hands out and leaves them out. Nothing changes hands. ' +
             '(The server has not answered — check the console for "[golf] LEDGER SILENT".)',
       choices: [
@@ -135,14 +191,14 @@ export function coconuttyDialog(): Dialog {
       text: () => {
         if (drinkLeft() > 0) {
           return (
-            'He builds it in the coconut, which is the jug you helped him make, and hands it over without a straw. ' +
+            'He makes the drink it in the coconut, and hands it over without a straw. ' +
             '"No straws," he says. "Straws are the one thing the sea never gives back."'
           )
         }
         // Still waiting on the server. Said out loud rather than left blank,
         // because the alternative is a frame of "that did not work" every time
         // one does.
-        if (drinkPending()) return 'He thumbs the switch. The motor takes a moment to decide about it.'
+        if (drinkPending()) return 'He turns on the blender. The motor takes a moment to run.'
         if (balance() < DRINK.price) {
           return `He looks at you, then at the blender, then at you. "${DRINK.price}," he says. "I did say."`
         }
@@ -158,7 +214,7 @@ export function coconuttyDialog(): Dialog {
       text:
         'Coconut, obviously. Pineapple, which I am not going to tell you where I get. ' +
         'Ice, which is the part that should worry you, and rum, which is the part that does not worry me at all. ' +
-        'You will find you get about the place quicker afterwards. I have stopped asking why.',
+        'You will find you get about the place quicker afterwards. Have fun.',
       choices: [
         { label: 'That is not how any of that works', goto: 'works' },
         { label: 'Fair enough', goto: '' }
@@ -168,7 +224,7 @@ export function coconuttyDialog(): Dialog {
     works: {
       text:
         'No. It is not. And yet.\n\n' +
-        'Look — I have been on this island eleven months, there is a woman in a cave who talks to metal, ' +
+        'Look, I have been on this island eleven months, there is a woman in a cave who talks to metal, ' +
         'and a man on the south beach who has named some of the shells. The drink is the least of it.',
       choices: [{ label: 'Good point', goto: '' }]
     },
@@ -186,10 +242,10 @@ export function coconuttyDialog(): Dialog {
     building: {
       text: () =>
         blenderIsBuilt()
-          ? 'Built it. Blades off a shipwreck, a jug out of a coconut, and a motor that has been under a cave ' +
-            'for longer than either of us. It sounds like a war and it makes a beautiful drink.'
-          : 'A blender. Three parts and I have got none of them: something to chop with, something to chop in, ' +
-            'and something to turn the first one inside the second. Ask me about it properly and I will send you off.',
+          ? 'Built it. Blades off a shipwreck, a jug out of a coconut, and a motor from the cave. ' +
+            'It sounds like a war and it makes a beautiful drink.'
+          : 'A blender. Three parts and I have got none of them: something to chop with, something to chop in! ' +
+            'Can you help me get them please.',
       choices: [
         { label: 'Why coconuts?', goto: 'why' },
         { label: 'Right', goto: '' }
@@ -225,6 +281,18 @@ export function coconuttyDialog(): Dialog {
 export function coconutsAccepted(taken: number): void {
   if (taken <= 0) return
   report({ kind: 'coconuts', handed: taken })
+}
+
+/**
+ * The same, for the ones that went into the jug.
+ *
+ * A separate event so it reaches the jug quest and only the jug quest. The
+ * hundred counts 'coconuts' and this is not one of those: it did not go
+ * against his daily twelve, and it does not go towards the ball.
+ */
+export function jugCoconutsAccepted(taken: number): void {
+  if (taken <= 0) return
+  report({ kind: 'jugCoconuts', handed: taken })
 }
 
 /** Tells the quest engine the motor came out of the ground. Once, ever. */

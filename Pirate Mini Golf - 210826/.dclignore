@@ -19,3 +19,31 @@ README.md
 *.rar
 *.md
 src
+
+# --- deployed but referenced by nothing ---
+# Checked against every asset path in main.crdt and in src/. Kept on disk
+# rather than deleted, so putting any of them back is one line.
+#
+# Both the folder and the glob are listed for the two directories, because a
+# bare path matches a folder in some dclignore implementations and only the
+# glob matches in others, and a pattern that does nothing is free.
+
+# Byte-for-byte duplicates of scene/Cave/Cave Doors/* and scene/Shack/Balls.glb,
+# which are the copies the scene actually points at.
+assets/Models
+assets/Models/**
+
+# Left over from an asset pack. Nothing references it.
+assets/asset-packs
+assets/asset-packs/**
+
+# No entity in the scene and no code reference. Only the vertical one is used.
+assets/scene/Waterfall/Horizontal Waterfall.glb
+
+# The two shack props whose entities were removed from the scene, leaving the
+# models behind as orphans.
+assets/scene/Shack/Clubs.glb
+assets/scene/Shack/Balls.glb
+
+# Superseded by pirate-music-2.mp3, which is the one music.ts asks for.
+assets/scene/Golf/sounds/pirate-music.mp3

@@ -97,3 +97,17 @@ export function setBallSkin(id: string): void {
   }
   setBallModel(skin.id, skin.model)
 }
+
+/**
+ * World scale of the ball's model, so a remote player's ball can match it.
+ *
+ * The authored 'ball' entity is scaled down for the physics body and the model
+ * hung off it is scaled back up by ten, so the number that matters is the
+ * product of the two. Read rather than written down, because the day somebody
+ * rescales the authored entity is the day a written-down copy is wrong.
+ */
+export function ballModelScale(): number {
+  const parent = ballEntity()
+  const t = parent ? Transform.getOrNull(parent) : null
+  return (t ? t.scale.x : 0.1) * 10
+}

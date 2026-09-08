@@ -16,7 +16,8 @@ import { ADMIN, BOARD, CLUB_CARRY, CUP, FREE, NPC_LOOK, RULES, SHOPKEEPER, SHOT 
 import { cupCentre, Hole, HOLES, PRACTICE, SECRET, teeStand, TOTAL_PAR } from './course'
 import { boardPosition, markJoined, markLeft, requestJoin, updateBoard } from './board'
 import { myRow, myUserId, nameMatches, publishBall, roster, updateRemotes } from './net'
-import { dismiss as dismissDialog, distanceToNpc, talking, updateNpcs } from './npc'
+import { blockConversations, dismiss as dismissDialog, distanceToNpc, talking, updateNpcs } from './npc'
+import { setting } from './settings'
 import { detectorIsOut, hasDetector, overFind, toggleDetector, tryDig } from './detector'
 import { claimSecretHole, playerStanding, previewAward, submitRound } from './points'
 import { report as reportQuest } from './quests'
@@ -41,6 +42,7 @@ export type Physics = {
   settled(): boolean
   place(x: number, y: number, z: number): void
   strike(dirX: number, dirZ: number, power: number): void
+  chipshot(power: number): void
   freeze(): void
   probe: SurfaceProbe
   /** How far the ball rolls on the flat for a given charge, in metres. */
@@ -354,6 +356,50 @@ export class Game {
     )
   }
 
+  /**
+   * Walks off the course part-way through, from the hub.
+   *
+   * The board is the only way in and, until now, finishing the nine was the
+   * only way out. That is fine for a round you meant to play and no use at all
+   * for one you signed on to by accident, or started with nine holes' worth of
+   * time and now have two minutes of. Under the group hole gate it is worse
+   * than an inconvenience: a player who has gone for good still holds up
+   * everyone behind them, and nobody can do anything about it.
+   *
+   * It is the tail of finishRound and none of the head. The card is torn up,
+   * the round counter moves on so the roster stops showing a half-played card
+   * against your name, and you are put back on the practice green with the
+   * board offering again. Nothing is reported to the quests and nothing is
+   * submitted for points, because an abandoned card is not a score: banking a
+   * three-hole round next to a nine-hole one would make the leaderboard a
+   * measure of who stopped early.
+   */
+  leaveRound(): void {
+    if (!this.state.joined) return
+
+    this.state.round++
+    this.state.penalties = 0
+    for (let i = 0; i < this.state.card.length; i++) this.state.card[i] = -1
+
+    this.state.joined = false
+    markLeft()
+    const row = myRow()
+    if (row) {
+      row.joined = false
+      row.round = this.state.round
+      row.card = this.state.card.slice()
+    }
+
+    this.beginPractice(false)
+    this.movePlayerToTee(PRACTICE)
+    this.toast(
+      'Round left',
+      'Card torn up and nothing scored. The board by the first tee signs you back on.',
+      'neutral',
+      4
+    )
+  }
+
   restart(): void {
     this.state.practising = false
     for (let i = 0; i < this.state.card.length; i++) this.state.card[i] = -1
@@ -525,6 +571,39 @@ export class Game {
   // -------------------------------------------------------------------------
 
   update(dt: number): void {
+    // No conversations during a round. Not just mid-shot: signing on at the
+    // board and playing the nine is one continuous thing, and a character who
+    // starts talking between holes is interrupting it as surely as one who
+    // does it during the backswing.
+    //
+    // Off the course everybody is available again, which is where the quests
+    // are meant to be picked up and handed in: the practice green, the walk up
+    // the beach, and the moment the ninth is finished.
+    //
+    // The practice green keeps the narrower rule as well, because it sits in
+    // the shack with Salt stood beside it and a putt there should not open his
+    // crate over the swing meter.
+    //
+    // Set every frame rather than toggled on the transitions, so there is no
+    // state to get stuck: whatever is happening, this is true or false to
+    // match it.
+    const inRound = this.state.joined && this.state.phase !== 'finished'
+    const midShot =
+      this.state.phase === 'address' ||
+      this.state.phase === 'swinging' ||
+      this.state.phase === 'rolling' ||
+      this.state.phase === 'sinking'
+    // The round half of that is the player's to turn off. Some people want to
+    // finish the nine without Coconutty saying hello on the eighth; some are
+    // here for the island and the golf is what they do between conversations,
+    // and being unable to speak to anybody for twenty minutes reads as the
+    // characters having gone cold on them.
+    //
+    // The shot half is not offered, and should not be. A conversation takes
+    // the camera, and taking the camera off somebody mid-swing is not a
+    // preference, it is a bug with a setting in front of it.
+    blockConversations((inRound && !setting('talkInRounds')) || midShot)
+
     // These run whether or not you are playing — a spectator should still see
     // the board fill up and everyone else's balls moving.
     updateBoard(dt)
@@ -841,6 +920,7 @@ export class Game {
     const dirZ = -aim.x * sin + aim.z * cos
 
     this.physics.strike(dirX, dirZ, power)
+    this.physics.chipshot(power)
 
     this.state.strokes++
     this.state.lastStrike = strikeLabel(this.swing)

@@ -3,7 +3,9 @@ import {
   engine,
   Entity,
   InputAction,
+  Material,
   MeshCollider,
+  MeshRenderer,
   pointerEventsSystem,
   TextShape,
   Transform
@@ -11,6 +13,7 @@ import {
 import { Color3, Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
 import { BOARD } from './config'
 import { present, roster } from './net'
+import { onPhone } from './npc'
 
 /**
  * The sign-up board by the first tee.
@@ -36,10 +39,55 @@ import { present, roster } from './net'
 let panel: Entity | undefined
 let hit: Entity | undefined
 let title: Entity | undefined
-let list: Entity | undefined
+let prompt: Entity | undefined
+let count: Entity | undefined
+let putter: Entity | undefined
 let onJoin: (() => void) | undefined
 let joined = false
 let where = Vector3.Zero()
+
+/**
+ * The join line, in the controls the player actually has.
+ *
+ * On a phone there is no E to press. There is a button down the right-hand
+ * side wearing the scene's putter art, and the sign says so by wearing the
+ * same picture: the letter comes out, the icon goes in, and the wording drops
+ * to what is left. The leading spaces are the icon's seat — a TextShape holds
+ * no pictures, so the only way to make room inside a centred line is to make
+ * the line longer and leave the extra empty.
+ */
+const JOIN_WORDS = 'to join'
+
+function joinLine(): string {
+  if (!onPhone()) return 'Press E to join'
+  return ' '.repeat(BOARD.joinIcon.pad) + JOIN_WORDS
+}
+
+/**
+ * Show or hide the putter that stands in for E on a phone.
+ *
+ * Where it goes is worked out once, at setup, and never again: the prompt is a
+ * single line at a fixed height now, so nothing that happens in the game can
+ * move it. This used to compute a vertical offset from how many lines the sign
+ * was printing, which is exactly the coupling that made a sign full of names
+ * shift its own instructions about.
+ *
+ * The horizontal sum is still the padding: the line is centred as a whole, so
+ * the empty half of it sits left of centre by half the wording, and the icon
+ * goes in the middle of that.
+ *
+ * Hidden by scaling to nothing rather than by deleting and rebuilding. The
+ * board refreshes twice a second and an entity churned at that rate for the
+ * length of a round is a lot of work to avoid drawing one square.
+ */
+function showPutter(show: boolean): void {
+  if (!putter) return
+  const t = Transform.getMutableOrNull(putter)
+  if (!t) return
+  t.scale = show
+    ? Vector3.create(BOARD.joinIcon.size, BOARD.joinIcon.size, 1)
+    : Vector3.Zero()
+}
 
 /** Where the board ended up, so the game can offer E as a fallback nearby. */
 export function boardPosition(): Vector3 {
@@ -107,21 +155,66 @@ export function setupBoard(join: () => void): void {
     outlineColor: Color3.Black()
   })
 
-  list = engine.addEntity()
-  Transform.create(list, {
-    position: Vector3.create(BOARD.textX, BOARD.listY, BOARD.standoff),
+  prompt = engine.addEntity()
+  Transform.create(prompt, {
+    position: Vector3.create(BOARD.textX, BOARD.promptY, BOARD.standoff),
     rotation: Quaternion.fromEulerDegrees(0, BOARD.textYaw, 0),
     parent: panel
   })
-  TextShape.create(list, {
-    text: 'Nobody playing yet',
-    fontSize: BOARD.listSize,
+  TextShape.create(prompt, {
+    text: joinLine(),
+    fontSize: BOARD.promptSize,
     width: BOARD.width,
     height: BOARD.tall,
     textWrapping: false,
     textColor: Color4.create(0.9, 0.92, 0.96, 1),
     outlineWidth: 0.12,
     outlineColor: Color3.Black()
+  })
+
+  count = engine.addEntity()
+  Transform.create(count, {
+    position: Vector3.create(BOARD.textX, BOARD.countY, BOARD.standoff),
+    rotation: Quaternion.fromEulerDegrees(0, BOARD.textYaw, 0),
+    parent: panel
+  })
+  TextShape.create(count, {
+    text: '',
+    fontSize: BOARD.countSize,
+    width: BOARD.width,
+    height: BOARD.tall,
+    textWrapping: false,
+    textColor: Color4.create(0.78, 0.82, 0.88, 1),
+    outlineWidth: 0.1,
+    outlineColor: Color3.Black()
+  })
+
+  // The putter that stands in for E on a phone. Built on every platform and
+  // left at zero scale on desktop, so there is one code path and no branch on
+  // the platform at setup time — updateBoard is the only thing that decides
+  // whether it is seen.
+  putter = engine.addEntity()
+  const icon = BOARD.joinIcon
+  const chars = icon.pad + JOIN_WORDS.length
+  Transform.create(putter, {
+    position: Vector3.create(
+      BOARD.textX + (icon.pad / 2 - chars / 2) * icon.charWidth,
+      BOARD.promptY,
+      // A hair in front of the lettering, for the same reason the lettering
+      // stands off the timber: two surfaces at one depth flicker.
+      BOARD.standoff + 0.002
+    ),
+    rotation: Quaternion.fromEulerDegrees(0, BOARD.textYaw, 0),
+    scale: Vector3.Zero(),
+    parent: panel
+  })
+  MeshRenderer.setPlane(putter)
+  // Unlit, so it reads at the same strength as the lettering beside it at any
+  // time of day. alphaTest rather than blending: the art is a solid shape on
+  // a clear background, and a cut-out needs no sorting.
+  Material.setBasicMaterial(putter, {
+    texture: Material.Texture.Common({ src: BOARD.joinIcon.src }),
+    alphaTest: 0.5
   })
 
   pointerEventsSystem.onPointerDown(
@@ -139,6 +232,10 @@ export function setupBoard(join: () => void): void {
 /** Called once the local player is in, so the board stops offering. */
 export function markJoined(): void {
   joined = true
+  // Straight away rather than on the next refresh. The board is what you are
+  // looking at when you join, so half a second of a sign still asking you to
+  // is half a second of wondering whether it took.
+  showPutter(false)
   if (!hit) return
   pointerEventsSystem.removeOnPointerDown(hit)
 }
@@ -168,33 +265,40 @@ export function markLeft(): void {
 
 let refresh = 0
 
+/**
+ * A count, not a cast list.
+ *
+ * How many are on the course, and how many are stood about not playing. Names
+ * and scores are the standings panel's job: it is on screen, it has room for
+ * six rows and a place each, and it is legible from anywhere on the island
+ * rather than only from in front of a 2.4 metre sign.
+ *
+ * Always one line, whatever the numbers are, which is the property that
+ * matters. The sign cannot overflow because there is nothing on it that grows.
+ */
+function countLine(playing: number, watching: number): string {
+  const out: string[] = []
+  if (playing > 0) out.push(`${playing} playing`)
+  if (watching > 0) out.push(`${watching} nearby`)
+  return out.join('   ·   ')
+}
+
 export function updateBoard(dt: number): void {
-  if (!list) return
+  if (!prompt || !count) return
   refresh -= dt
   if (refresh > 0) return
   refresh = BOARD.refreshInterval
 
-  const playing = roster()
-  const text = TextShape.getMutableOrNull(list)
-  if (!text) return
+  const playing = roster().length
+  const watching = Math.max(0, present().length - playing - 1)
 
-  if (playing.length === 0) {
-    const watching = present().length - 1
-    text.text =
-      (joined ? 'You are in. Walk to the tee.\n' : 'Press E to join\n') +
-      (watching > 0 ? `${watching} ${watching === 1 ? 'person' : 'people'} nearby` : '')
-    return
+  const promptText = TextShape.getMutableOrNull(prompt)
+  if (promptText) {
+    promptText.text = joined ? 'You are in. Walk to the tee.' : joinLine()
   }
 
-  const lines = playing
-    .slice(0, BOARD.maxNames)
-    .map((p) => {
-      const played = p.card.filter((s) => s >= 0).length
-      const total = p.card.reduce((n, s) => (s >= 0 ? n + s : n), 0)
-      return `${p.name}   thru ${played}   ${total}`
-    })
-    .join('\n')
+  const countText = TextShape.getMutableOrNull(count)
+  if (countText) countText.text = countLine(playing, watching)
 
-  const more = playing.length > BOARD.maxNames ? `\n+${playing.length - BOARD.maxNames} more` : ''
-  text.text = (joined ? '' : 'Press E to join\n\n') + lines + more
+  showPutter(!joined && onPhone())
 }

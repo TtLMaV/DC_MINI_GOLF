@@ -1,6 +1,6 @@
 import { DETECTOR } from './config'
 import { giveDetector, hasDetector, scrapCarried } from './detector'
-import { Dialog } from './npc'
+import { Dialog, onPhone } from './npc'
 import { handScrap, scrapTotal } from './points'
 import { addQuests, questChoices, report } from './quests'
 
@@ -28,14 +28,14 @@ export function sallyDialog(): Dialog {
   const greeting = () => {
     if (!hasDetector()) {
       return (
-        'You are the first person to come this far up the beach in months. ' +
-        'Good. I need someone with a strong back and no strong opinions about digging.'
+        'Finally, sign of life! You are the first person to come into the cave in months. ' +
+        'I need someone with a strong back and no strong opinions about digging.'
       )
     }
     const n = held()
     if (n === 0) {
       return (
-        'Nothing on you. The floor here is full of it — sweep slowly and let the thing click. ' +
+        'Nothing on you. The floor here is full of it, sweep slowly and let the thing click. ' +
         'People always walk too fast and then tell me the cave is empty.'
       )
     }
@@ -72,9 +72,11 @@ export function sallyDialog(): Dialog {
 
     given: {
       text:
-        'Sling it low and walk. It clicks when there is metal within about fifteen metres and it clicks faster ' +
-        'the closer you get — when it turns into one noise rather than a lot of noises, you are stood on it. ' +
-        'Press E and dig. Three puts it away when the clicking gets on your nerves, which it will.',
+        'Sling it low and walk. Take good care of her, she is the best metal detector I have ever had. It clicks when there is metal within about fifteen metres. ' +
+        'Faster the tick the closer you are to the gold, or in this case, scrap!' +
+        (onPhone()
+          ? 'Tap the putter button and dig. Tap the + button to stow your detector when the clicking gets on your nerves, which it will.'
+          : 'Press E and dig. Press 3 to stow your detector when the clicking gets on your nerves, which it will.'),
       choices: [
         { label: 'What are you looking for?', goto: 'why' },
         { label: 'Right', goto: '' }
@@ -83,7 +85,7 @@ export function sallyDialog(): Dialog {
 
     handed: {
       text: () =>
-        `That is the lot. ${scrapTotal()} through my hands now, all told. ` +
+        `That is the lot. ${scrapTotal()}  ` +
         'Some of it is rubbish. Some of it is not, and telling the difference is the only thing I am good at.',
       choices: [
         { label: 'What have you worked out?', goto: 'why' },
@@ -93,7 +95,7 @@ export function sallyDialog(): Dialog {
 
     why: {
       text:
-        'Three things, in order. Why a ship that size went down in water this calm. ' +
+        'Three things, in order. Why a ship that size went down in water this calm and where did the ship go. ' +
         'Where a full nine-hole golf course came from on an island with no port. ' +
         'And how anybody gets off it, because in eleven months I have not seen one boat that was not already wrecked.',
       choices: [
@@ -109,9 +111,9 @@ export function sallyDialog(): Dialog {
       text: () => {
         const total = scrapTotal()
         if (total === 0) return 'None whatsoever. That is rather the problem, and why you are holding a detector.'
-        if (total < 20) return 'Pieces of one. The metal down there did not get bent by rocks, I will say that much.'
-        if (total < 50) return 'Enough to know the course and the ship are the same metal, which raises worse questions than it settles.'
-        return 'More than I want. Ask me over a proper drink and I will tell you the lot.'
+        if (total < 20) return 'I working on something special for you. The metal in the cave did not get bent by rocks, I will say that much.'
+        if (total < 50) return 'Enough to know the course and the ship are the same metal, which raises more questions than it settles.'
+        return 'More than I want. Ask me over a proper drink and I will tell you.'
       },
       choices: [
         { label: 'Anything I can do?', goto: 'start' },
@@ -122,8 +124,8 @@ export function sallyDialog(): Dialog {
     howto: {
       text: () =>
         `It reaches about ${DETECTOR.senseRange} metres and you can dig once you are within ${DETECTOR.digRange} of a thing. ` +
-        'Slow clicks mean something is out there, fast clicks mean it is under your boots. ' +
-        'A dug spot fills back in after a while — the sea keeps putting things back, which is either lucky or sinister.',
+        'Slow clicks mean something is out there, fast clicks mean it is under you. ' +
+        'It is weird, a dug spot fills back in after a while, the sea keeps putting things back, not sure why!',
       choices: [
         { label: 'What are you looking for?', goto: 'why' },
         { label: 'Got it', goto: '' }

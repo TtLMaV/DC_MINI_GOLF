@@ -12,6 +12,7 @@ import { identityReady, myDisplayName, myUserId } from './net'
 import { setStandings } from './standings'
 import { setShellsCarried } from './shells'
 import { setScrapCarried } from './detector'
+import { applySavedSettings, onSettingChanged } from './settings'
 
 /**
  * Pixel Points: the client's view of the ledger.
@@ -47,6 +48,8 @@ let claims = new Set<string>()
 let questsAtStart: Record<string, number> = {}
 /** Set once the first ledger arrives, so quest progress is seeded only once. */
 let seeded = false
+/** Whether the saved settings have arrived and been applied once. */
+let settingsSeeded = false
 
 export function pointsStatus(): PointsStatus {
   return status
@@ -167,6 +170,15 @@ let motorFound = false
 let onCoconutsTaken:
   | ((taken: number, paid: number, refused: number, total: number) => void)
   | undefined
+let onJugTaken: ((taken: number, paid: number, need: number) => void) | undefined
+/**
+ * What the jug still wants, from the server rather than from the quest.
+ *
+ * -1 until it has answered once. The dialogue uses it to decide whether to
+ * offer the hand-over at all, and offering one the server would refuse is
+ * worse than not offering it.
+ */
+let jugNeed = -1
 /** Set the first time Coconutty answers, so his dialogue can tell the truth. */
 let heardFromCoconutty = false
 
@@ -199,10 +211,30 @@ export function handCoconuts(): void {
   void room.send('handCoconuts', { all: 1 })
 }
 
+/**
+ * Offers Coconutty coconuts for the jug.
+ *
+ * A different errand and a different message. He takes only what the jug still
+ * wants, none of it goes against his daily twelve or towards the hundred, and
+ * the server decides how many that is — the client asks, it does not say.
+ */
+export function handJugCoconuts(): void {
+  void room.send('handJugCoconuts', { all: 1 })
+}
+
 export function onCoconutsAccepted(
   cb: (taken: number, paid: number, refused: number, total: number) => void
 ): void {
   onCoconutsTaken = cb
+}
+
+export function onJugCoconutsAccepted(cb: (taken: number, paid: number, need: number) => void): void {
+  onJugTaken = cb
+}
+
+/** What the jug still wants, as of the server's last answer. */
+export function jugStillWants(): number {
+  return jugNeed
 }
 
 let shellsTodayValue = 0
@@ -261,6 +293,14 @@ export function setupPoints(
   onSeeded = seededCallback
   onAward = awardCallback
   onRefused = refusedCallback
+
+  // A change in the settings tab goes straight out. There is no batching and
+  // no confirmation: the server takes it, saves it with the rest of the
+  // wallet, and the switch on screen has already moved because the panel reads
+  // its own state rather than waiting for a round trip.
+  onSettingChanged((key, on) => {
+    void room.send('settings', { key, on })
+  })
 
   room.onMessage('ledger', (data) => {
     balanceValue = data.balance
@@ -327,6 +367,23 @@ export function setupPoints(
     }
   })
 
+  /**
+   * The switches this player had saved, on their own message.
+   *
+   * Same rule as the quests: only the first one seeds. Every later one is the
+   * answer to something we did, and re-seeding from it would undo a switch the
+   * player moved a moment ago.
+   */
+  room.onMessage('mySettings', (data) => {
+    if (settingsSeeded) return
+    settingsSeeded = true
+    try {
+      applySavedSettings(JSON.parse(data.json) as Record<string, unknown>)
+    } catch {
+      /* a malformed blob leaves the defaults, which are all 'off' */
+    }
+  })
+
   room.onMessage('awarded', (data) => {
     onAward?.(data.amount, data.reason)
   })
@@ -343,6 +400,12 @@ export function setupPoints(
   room.onMessage('coconutsTaken', (data) => {
     heardFromCoconutty = true
     onCoconutsTaken?.(data.taken, data.paid, data.refused, data.total)
+  })
+
+  room.onMessage('jugCoconutsTaken', (data) => {
+    heardFromCoconutty = true
+    jugNeed = data.need
+    onJugTaken?.(data.taken, data.paid, data.need)
   })
 
   // The only message that changes how the player moves. Wired to the server's

@@ -93,6 +93,23 @@ export type QuestEvent =
       handed: number
     }
   | {
+      /**
+       * Coconuts handed over for the jug, which is a different errand.
+       *
+       * They come through their own hand-over: outside his daily twelve, not
+       * counted towards the hundred, and capped by what the jug still wants.
+       * A separate event rather than a flag on 'coconuts' so that no quest can
+       * accidentally count both — the hundred counts one kind, the jug counts
+       * the other, and neither has to know the other exists.
+       */
+      kind: 'jugCoconuts'
+      handed: number
+    }
+  | {
+      /** One bone, picked up off the island or the cave floor. */
+      kind: 'bone'
+    }
+  | {
       /** The old motor, out of the cave floor. Happens once, ever. */
       kind: 'motor'
     }
@@ -148,6 +165,16 @@ export type Quest = {
   /** After the reward is paid. */
   afterwards: string
 }
+
+/**
+ * How many coconuts the jug wants.
+ *
+ * Named because three places have to agree on it: the quest below, the
+ * hand-over button in Coconutty's dialogue, and the server, which is what
+ * actually decides how many it will take. The server reads the number off the
+ * quest rather than off this constant, so the one that matters cannot drift.
+ */
+export const JUG_COCONUTS = 12
 
 export const QUESTS: Quest[] = [
   {
@@ -338,10 +365,14 @@ export const QUESTS: Quest[] = [
     id: 'scrap-others',
     name: 'The Ones Before',
     giver: 'sally',
-    objective: 'Bring Sally 16 scrap',
+    // Bones rather than scrap, which is what every line she says about it was
+    // already describing. The id keeps its old spelling on purpose: it is the
+    // key her progress is stored under on the server and the key the reward is
+    // claimed with, so renaming it would hand everyone mid-quest a fresh start
+    // and let anyone who had already been paid claim it again.
+    objective: 'Find 16 bones for Sally',
     target: 16,
-    counts: (e) => e.kind === 'scrap' && e.handed > 0,
-    amount: (e) => (e.kind === 'scrap' ? e.handed : 0),
+    counts: (e) => e.kind === 'bone',
     reward: 240,
     offer:
       'There are bones on this island and none of them are recent. Sixteen pieces. ' +
@@ -456,10 +487,13 @@ export const QUESTS: Quest[] = [
     id: 'blender-vessel',
     name: 'Something To Chop In',
     giver: 'coconutty',
-    objective: 'Bring Coconutty 12 more coconuts for the jug',
-    target: 12,
-    counts: (e) => e.kind === 'coconuts' && e.handed > 0,
-    amount: (e) => (e.kind === 'coconuts' ? e.handed : 0),
+    objective: `Bring Coconutty ${JUG_COCONUTS} more coconuts for the jug`,
+    target: JUG_COCONUTS,
+    // Its own kind of event, so the jug's twelve are outside his daily twelve
+    // and outside the hundred. He asked for them for a specific job; a man who
+    // has taken his fill for the day can still be handed the makings of a jug.
+    counts: (e) => e.kind === 'jugCoconuts' && e.handed > 0,
+    amount: (e) => (e.kind === 'jugCoconuts' ? e.handed : 0),
     reward: 150,
     offer:
       'Now something to chop in. Twelve more, and I will hollow out the biggest and keep the rest for the mix. ' +
@@ -571,6 +605,60 @@ export function trackedQuests(): { quest: Quest; done: number; status: QuestStat
     const st = stateOf(q.id).status
     return st === 'active' || st === 'complete'
   }).map((q) => ({ quest: q, done: stateOf(q.id).done, status: stateOf(q.id).status }))
+}
+
+// ---------------------------------------------------------------------------
+// The test panel
+// ---------------------------------------------------------------------------
+
+/**
+ * Every quest and where it has got to, in the order they are written.
+ *
+ * trackedQuests only returns the ones running, which is right for the tracker
+ * and no use at all for a panel whose whole job is to start one.
+ */
+export function allQuests(): { quest: Quest; done: number; status: QuestStatus }[] {
+  return QUESTS.map((q) => ({ quest: q, done: stateOf(q.id).done, status: stateOf(q.id).status }))
+}
+
+/**
+ * Take a quest without walking to whoever hands it out.
+ *
+ * The same call the dialogue makes, so a quest taken from the panel is in
+ * exactly the state one taken from a conversation is — which is the point.
+ * Testing a path with a shortcut that does not use it proves nothing.
+ */
+export function adminTake(id: string): void {
+  acceptQuest(id)
+}
+
+/**
+ * Take it if it is not taken, fill the counter, and collect the reward.
+ *
+ * Written as three steps through the ordinary functions rather than by setting
+ * the status to 'claimed' directly, because the interesting part of finishing
+ * a quest is not the status. It is everything that hangs off it: the progress
+ * going to the server, the reward being claimed against 'quest:<id>', and — for
+ * the last of Coconutty's three — the claim being what the wallet reads to
+ * decide the blender is built and the bar can appear.
+ *
+ * The server is still the one deciding. It caps progress at the target and
+ * pays a claim key once ever, so this cannot mint anything: it saves the walk,
+ * not the rules.
+ */
+export function adminFinish(id: string): void {
+  const quest = questById(id)
+  if (!quest) return
+  const s = stateOf(id)
+  if (s.status === 'claimed') return
+
+  if (s.status === 'offered') acceptQuest(id)
+  if (s.status !== 'complete') {
+    s.done = quest.target
+    s.status = 'complete'
+    reportQuestProgress(id, s.done)
+  }
+  claimQuest(id)
 }
 
 export function acceptQuest(id: string): void {
@@ -800,6 +888,35 @@ export function giverShortName(giver: string): string {
  * dialogue asks, so the panel and the character cannot disagree about what is
  * on the table.
  */
+/**
+ * Whether one particular quest is running right now.
+ *
+ * For things in the world that only exist while a quest does — the bones are
+ * the first — so they can ask without building the three lists questsByStatus
+ * allocates. 'active' and not 'complete': once the last bone is found there is
+ * nothing left to look for, and leaving them out would be an island still
+ * telling you to search it.
+ */
+export function questIsRunning(id: string): boolean {
+  return stateOf(id).status === 'active'
+}
+
+/**
+ * How much of a running quest is left to do.
+ *
+ * For anything that wants to offer "hand over the four you are carrying" and
+ * needs to know that only three of them are wanted. Zero once it is finished,
+ * so a caller can treat "nothing left to want" and "nothing to offer" as the
+ * same answer.
+ */
+export function questRemaining(id: string): number {
+  const quest = questById(id)
+  if (!quest) return 0
+  const s = stateOf(id)
+  if (s.status === 'claimed' || s.status === 'complete') return 0
+  return Math.max(0, quest.target - s.done)
+}
+
 export function questsByStatus(): {
   active: { quest: Quest; done: number; status: QuestStatus }[]
   available: Quest[]

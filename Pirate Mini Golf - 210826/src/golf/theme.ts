@@ -108,6 +108,23 @@ export function frame(of: Frame, tint?: Color4): UiBackgroundProps {
   }
 }
 
+/**
+ * How far each frame's own art reaches in from the edge, in pixels.
+ *
+ * Nine-slicing draws the corner and edge art at the texture's own size rather
+ * than at a fraction of the element, so a 24-pixel border is 24 pixels around
+ * a 500-wide scorecard and 24 pixels around a 128-wide chip. The consequence
+ * is the one thing that goes wrong with these frames over and over: padding
+ * set to less than this number does not put the text near the edge, it puts
+ * the text *under the frame*, and what you see is a clipped first letter and a
+ * number sitting on a gold rule.
+ *
+ * So every framed panel pads by at least its own number here, plus whatever
+ * breathing room it wants on top. These are the same figures as the `slice`
+ * fractions above, multiplied out: 0.09375 x 256, 0.125 x 96, 0.125 x 64.
+ */
+export const BORDER = { panel: 24, button: 12, chip: 8 } as const
+
 export const panel = (tint?: Color4) => frame(FRAMES.panel, tint)
 export const panelLit = (tint?: Color4) => frame(FRAMES.panelLit, tint)
 export const button = (tint?: Color4) => frame(FRAMES.button, tint)

@@ -67,7 +67,13 @@ export const MESSAGES = {
     /** Whether the old motor has been dug up, so it is not buried twice. */
     motor: Schemas.Boolean,
 
-    /** False for a guest, who has nowhere durable to keep any of it. */
+    /**
+     * False for a guest, who has nowhere durable to keep any of it.
+     *
+     * The last field, and it is going to stay the last field. Nothing gets
+     * added to this message again — see `mySettings` at the bottom of this
+     * file for why, and for where to put the next thing instead.
+     */
     durable: Schemas.Boolean
   }),
 
@@ -149,6 +155,19 @@ export const MESSAGES = {
   /** Client -> server: where a quest has got to. */
   quest: Schemas.Map({ id: Schemas.String, done: Schemas.Int }),
 
+  /**
+   * Client -> server: a switch moved in the settings tab.
+   *
+   * One key at a time rather than the whole set, so two devices signed in at
+   * once cannot overwrite each other's unrelated switches with a stale copy.
+   *
+   * The only message here the server does not check the meaning of. A setting
+   * is a preference about that player's own screen: nothing is paid for it,
+   * there is nothing to cheat, and the server's whole job is to hand the same
+   * answer back next time.
+   */
+  settings: Schemas.Map({ key: Schemas.String, on: Schemas.Boolean }),
+
   /** Client -> server: buy an item, priced by the server from the catalogue. */
   buy: Schemas.Map({ id: Schemas.String }),
 
@@ -216,6 +235,56 @@ export const MESSAGES = {
     today: Schemas.String,
     /** Which UTC day the 'today' table belongs to, so a stale one can be spotted. */
     day: Schemas.String
+  }),
+
+  /**
+   * Server -> one client: the switches that player has saved.
+   *
+   * A message of its own rather than another field on `ledger`, and the reason
+   * is worth the paragraph.
+   *
+   * A Schemas.Map has no field tags. It writes its properties in declaration
+   * order and reads them back in the same order, so where a field sits IS its
+   * identity on the wire, and the count of them has to agree at both ends. The
+   * client and the server run the same bundle but they do not necessarily run
+   * it at the same moment: a preview server or a deployed world server can go
+   * on holding the previous build for a while after the client has the new one.
+   * For as long as that gap is open, a ledger written with one field fewer than
+   * the reader expects is not a ledger with a field missing, it is a ledger
+   * that fails to decode — and everything that message carries goes with it,
+   * including `owned` and `equipped`, which is what the scene puts a ball and a
+   * club in everybody's hands from.
+   *
+   * That is what took every player's ball and club away twice today. Adding to
+   * `ledger` at all is the mistake, wherever in it the field goes.
+   *
+   * A separate message cannot do that. An old server never sends it and a new
+   * client simply never hears it, so the cost of a version gap is that settings
+   * stay at their defaults for a few minutes. Everything else carries on.
+   *
+   * One JSON string rather than a field per switch, for the same reason the
+   * claims and the quests travel as JSON: the shape is open-ended and a schema
+   * for it would need revising every time a switch is added.
+   */
+  mySettings: Schemas.Map({ json: Schemas.String }),
+
+  /**
+   * Client -> server: hand over what the jug still wants, and nothing else.
+   *
+   * A message of its own rather than a flag on handCoconuts, for the reason
+   * spelled out above mySettings: adding a field to a message that already
+   * exists is what breaks a version gap. This one is also simply a different
+   * errand — those coconuts do not go against his daily twelve, do not count
+   * towards the hundred, and are capped by what the quest still needs rather
+   * than by his appetite.
+   */
+  handJugCoconuts: Schemas.Map({ all: Schemas.Int }),
+
+  /** Server -> one client: what went into the jug, what it paid, what is left to bring. */
+  jugCoconutsTaken: Schemas.Map({
+    taken: Schemas.Int,
+    paid: Schemas.Int,
+    need: Schemas.Int
   })
 }
 

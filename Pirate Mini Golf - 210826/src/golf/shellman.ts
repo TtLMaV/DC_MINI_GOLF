@@ -29,19 +29,19 @@ export function shellmanDialog(): Dialog {
     const n = held()
     if (n === 0) {
       return (
-        'No shells. You are carrying no shells at all. ' +
-        'They are on the sand, which is where they have always been, and I have told you now.'
+        'Hello there traveller. You do not appear to be carrying any shells. ' +
+        'They are on the sand, I am far to important to be looking for them myself, I will reward you if you collect them.'
       )
     }
     if (roomLeft() === 0) {
       return (
         `You have ${n}. I have had my ${SHELLS.dailyLimit} today and I have written them down. ` +
-        'Come back when it is tomorrow. It usually is, eventually.'
+        'Come back tomorrow.'
       )
     }
     return (
       `${n} shell${n === 1 ? '' : 's'}. I can take ${roomLeft()} more today. ` +
-      'I will not tell you what for. You would only ask again.'
+      'Mind your own business.'
     )
   }
 
@@ -118,7 +118,7 @@ export function shellmanDialog(): Dialog {
         if (total === 0) return 'None. Not one. I would remember.'
         const left = Math.max(0, SHELLS.forTheClub - total)
         return left > 0
-          ? `${total}. I know it is ${total} because I counted it ${total} times. ${left} short of the hundred.`
+          ? `${total}. Here is ${total} because I counted it ${total} times. ${left} short of the hundred.`
           : `${total}. Past the hundred. We agreed not to speak of the hundred.`
       },
       choices: [

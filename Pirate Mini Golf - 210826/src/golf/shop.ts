@@ -3,56 +3,13 @@ import { xpForLevel } from './ranks'
 import { room } from './room'
 
 /**
- * The shop, and what a player owns.
- *
- * Everything here is a row of data, the same way a quest is. An item has an
- * id, a price and enough to draw it; the machinery below never mentions golf,
- * and adding stock is adding a row.
- *
- * Nothing here is the truth. The server holds the balance, the owned list and
- * what is equipped, and prices items from this same catalogue — so a purchase
- * is a request, not an instruction, and the client cannot grant itself a club
- * however hard it tries. What comes back is the whole inventory, so there is
- * nothing to reconcile.
- *
- * ---------------------------------------------------------------------------
- * Clubs now change how far the ball goes
- * ---------------------------------------------------------------------------
- * They did not, for a long time, and the reason is still worth knowing: the
- * nine are scored, the card goes on a leaderboard, and a club you can buy that
- * hits further is a leaderboard nobody fully trusts. That is the price of the
- * decision below, and it was made knowingly rather than arriving with the shop.
- *
- * `power` is the multiplier on the full-charge launch speed. The Stick Club is
- * 1.0 by definition: it plays exactly as the game always has, so nothing a
- * current player has learned about distance is taken off them. Everything
- * above it is a genuine buff rather than the rest of the ladder being a nerf.
- *
- * The top of the ladder is 2.5, and that number is not free to change on its
- * own. The strongest club lands exactly on MAX_BALL_SPEED in index.ts, so a
- * power past 2.5 is simply clamped away unless that cap is raised to match.
- * The cap is safe to raise now that the physics step adapts to the ball's
- * speed, but it is not free: a faster ball means more substeps per frame, and
- * this scene gets played on phones.
- *
- * `forgiveness` is still unread by anything. It is left empty on purpose
- * rather than filled with numbers nothing consumes, which is how the previous
- * set of values came to be quietly lost.
+ * The shop, and what a player owns
  */
 
 export type ItemKind = 'club' | 'ball'
 
 /**
- * What stands between a player and an item.
- *
- * Price is a separate question. Almost everything on the ladder is both
- * unlocked *and* paid for — reaching First Mate puts the Ruby Club on the
- * shelf with a price on it. `free` means nothing gates it, not that it costs
- * nothing.
- *
- * `pending` is for art that exists with no condition decided yet. It shows in
- * the inventory as unobtainable rather than being left out, because a club
- * nobody can explain is worse than one that plainly says "not yet".
+ * What stands between a player and an item
  */
 export type Unlock =
   | { kind: 'free' }
@@ -71,6 +28,11 @@ export type Item = {
   /** What has to be true before it can be bought at all. */
   unlock: Unlock
 
+  /**
+   * For a quest reward, the rung of the ladder it is worth. Pricing only
+   */
+  tier?: number
+
   /** The .glb. Every item has its own now — no more shared placeholder. */
   model?: string
 
@@ -88,6 +50,8 @@ export type Item = {
   forgiveness?: number
   // NEW DAMPING MODIFIER PER CLUB TO ALTER BALL ROLLING DISTANCE
   damping?: number
+  // NEW RESTITUTION MODIFIER BASED ON CLUB
+  bounciness?: number
 }
 
 const CLUBS = 'assets/scene/Golf'
@@ -100,30 +64,15 @@ const FREE: Unlock = { kind: 'free' }
 const PENDING: Unlock = { kind: 'pending' }
 
 /**
- * What a rank-locked item costs, as a share of the ladder you climbed to reach
- * it.
- *
- * Prices used to be typed in by hand, which meant they said nothing about each
- * other: the Ruby Club at 1500 and the Master at 3000 were two numbers that
- * happened to be in the same file. Now every level-gated price is a fixed
- * fraction of xpForLevel(unlockLevel) — the lifetime Pixel Points you must
- * have earned to be allowed to buy it at all — so the ladder prices itself and
- * a retune of the curve carries the shop along with it.
- *
- * A quarter for a club, an eighth for a ball. Clubs are the rank reward and
- * should feel like the purchase of the tier; balls are the thing you swap for
- * fun, and two of the good ones should be affordable in the same stretch as
- * one club.
- *
- * The shares are chosen so that a player who has bought *everything* available
- * so far can still afford the next thing the moment it unlocks — which is the
- * only affordability property that actually matters, and the one a hand-typed
- * table has no way to guarantee. Owning the lot by level 100 comes to about
- * 47% of everything earned, which leaves the rest for drinks.
+ * What a rank-locked item costs, as a share of the ladder you climbed to reach it
  */
 export const PRICING = {
   club: 0.25,
-  ball: 0.12
+  ball: 0.12,
+  /**
+   * What a quest reward costs against the same thing on the rank ladder
+   */
+  questShare: 0.6
 }
 
 /**
@@ -153,7 +102,8 @@ export const CATALOGUE: Item[] = [
     // The baseline the whole ladder is measured against. Do not change it.
     power: 1.0,
     forgiveness: 0.0,
-    damping: 0.5,
+    damping: 0.4,
+    bounciness: 0.2,
     model: `${CLUBS}/Stick Club.glb`
   },
   {
@@ -165,7 +115,8 @@ export const CATALOGUE: Item[] = [
     unlock: level(6),
     power: 1.1,
     forgiveness: 0.2,
-    damping: 0.45,
+    damping: 0.375,
+    bounciness: 0.22,
     model: `${CLUBS}/Standard Club.glb`
   },
   {
@@ -177,7 +128,8 @@ export const CATALOGUE: Item[] = [
     unlock: level(11),
     power: 1.25,
     forgiveness: 0.4,
-    damping: 0.4,
+    damping: 0.35,
+    bounciness: 0.25,
     model: `${CLUBS}/Golden Club.glb`
   },
   {
@@ -190,6 +142,7 @@ export const CATALOGUE: Item[] = [
     power: 1.35,
     forgiveness: 0.55,
     damping: 0.35,
+    bounciness: 0.275,
     model: `${CLUBS}/Ruby Club.glb`
   },
   {
@@ -201,7 +154,8 @@ export const CATALOGUE: Item[] = [
     unlock: level(25),
     power: 1.4,
     forgiveness: 0.65,
-    damping: 0.3,
+    damping: 0.275,
+    bounciness: 0.3,
     model: `${CLUBS}/Master Club.glb`
   },
   {
@@ -211,17 +165,20 @@ export const CATALOGUE: Item[] = [
     blurb: 'Not a golf club. Nobody is going to tell you that.',
     price: 10000,
     unlock: level(100),
-    // Top of the ladder. Lands exactly on MAX_BALL_SPEED at full charge, so
-    // raising it needs that raised to match, and the note there read first.
     power: 1.5,
     forgiveness: 0.75,
-    damping: 0.25,
+    damping: 0.23,
+    bounciness: 0.3,
     model: `${CLUBS}/Pirate Cutlass Club.glb`
   },
 
   // --- clubs: earned rather than ranked ------------------------------------
-  // These cost nothing. The quest is the price, and charging twice for one
-  // thing makes the quest feel like a coupon.
+  // The quest is the gate, the points are the price. Neither on its own gets
+  // you one: no amount of putting unlocks the Flag Club, and finishing Three
+  // Aces puts it on the shelf rather than in your hand.
+  //
+  // `tier` is which rung each one stands on, and the price falls out of that.
+  // The literal price below is overwritten by the pass under the catalogue.
   {
     id: 'club-flag',
     kind: 'club',
@@ -229,9 +186,11 @@ export const CATALOGUE: Item[] = [
     blurb: 'Three in one round. They took the pin down for you.',
     price: 0,
     unlock: quest('three-aces'),
+    tier: 11,
     power: 1.25,
     forgiveness: 0.55,
-    damping: 0.4,
+    damping: 0.45,
+    bounciness: 0.25,
     model: `${CLUBS}/Flag Club.glb`
   },
   {
@@ -244,9 +203,11 @@ export const CATALOGUE: Item[] = [
     // rather than a reward for one good round. It was quest('under-par')
     // before the scrap existed.
     unlock: quest('scrap-mechanism'),
+    tier: 13,
     power: 1.3,
     forgiveness: 0.55,
     damping: 0.4,
+    bounciness: 0.25,
     model: `${CLUBS}/Mechanical Club.glb`
   },
   {
@@ -256,9 +217,11 @@ export const CATALOGUE: Item[] = [
     blurb: 'Ten shells off the beach, handed over in person.',
     price: 0,
     unlock: quest('shell-hoard'),
+    tier: 16,
     power: 1.35,
     forgiveness: 0.55,
-    damping: 0.3,
+    damping: 0.35,
+    bounciness: 0.25,
     model: `${CLUBS}/Seaside Club.glb`
   },
   {
@@ -268,9 +231,11 @@ export const CATALOGUE: Item[] = [
     blurb: 'Lit up like the pier on a Saturday.',
     price: 0,
     unlock: quest('secret-eight'),
+    tier: 14,
     power: 1.3,
     forgiveness: 0.55,
-    damping: 0.3,
+    damping: 0.35,
+    bounciness: 0.25,
     model: `${CLUBS}/Neon Club.glb`
   },
 
@@ -338,6 +303,7 @@ export const CATALOGUE: Item[] = [
     blurb: 'Eight on every hole. Deliberately.',
     price: 0,
     unlock: quest('all-eights'),
+    tier: 16,
     model: `${BALLS}/8- Ball.glb`
   },
   {
@@ -345,10 +311,9 @@ export const CATALOGUE: Item[] = [
     kind: 'ball',
     name: 'Cannon Ball',
     blurb: 'Ran out of shots on all nine. Some kind of record.',
-    // Free, like every other quest item. It was 100 for a while, which meant
-    // finishing the worst quest on the board and then being asked for money.
     price: 0,
     unlock: quest('all-nine-lost'),
+    tier: 12,
     model: `${BALLS}/Cannon Ball.glb`
   },
   {
@@ -358,6 +323,7 @@ export const CATALOGUE: Item[] = [
     blurb: 'Off one of the palms. Still has the husk on.',
     price: 0,
     unlock: quest('coconut-hundred'),
+    tier: 10,
     model: `${BALLS}/Coconut Ball.glb`
   },
   {
@@ -367,6 +333,7 @@ export const CATALOGUE: Item[] = [
     blurb: 'You will not lose this one after dark.',
     price: 0,
     unlock: quest('secret-eight'),
+    tier: 20,
     model: `${BALLS}/Neon Ball.glb`
   }
 ]
@@ -378,19 +345,26 @@ export const CATALOGUE: Item[] = [
  * entry, because the price is a function of two fields on the entry and one
  * expression cannot see both while the object is still being built.
  *
- * Only level unlocks are touched. A quest reward stays at whatever the entry
- * says — which is zero, and deliberately: finishing All Eights and then being
- * asked for money is the complaint the Cannon Ball already earned. The Golden
- * Ball keeps its hand-set price too, because it has no rank to price against;
- * being expensive and useless is the entire joke.
+ * Quest rewards go through the same curve, off their `tier` and at the quest
+ * share, so the whole shop is priced by one expression rather than two habits.
+ * A quest reward with no tier is left alone, which means it stays at zero and
+ * is granted on completion: that is the escape hatch if a particular reward
+ * should be a gift rather than a purchase.
+ *
+ * Note that a literal price on a level or quest entry is documentation rather
+ * than the price: this pass overwrites it. The Golden Ball's 1000 is the
+ * clearest example, since it is level-gated and actually charges 400.
  *
  * Both ends run this. shop.ts is imported by the HUD and by the server's
  * ledger, so the price the row shows and the price the wallet is charged are
  * not two numbers that agree — they are one number.
  */
 for (const item of CATALOGUE) {
-  if (item.unlock.kind !== 'level') continue
-  item.price = tidyPrice(xpForLevel(item.unlock.level) * PRICING[item.kind])
+  if (item.unlock.kind === 'level') {
+    item.price = tidyPrice(xpForLevel(item.unlock.level) * PRICING[item.kind])
+  } else if (item.unlock.kind === 'quest' && item.tier) {
+    item.price = tidyPrice(xpForLevel(item.tier) * PRICING[item.kind] * PRICING.questShare)
+  }
 }
 
 /**
@@ -474,8 +448,24 @@ export function onEquipChanged(callback: (item: Item) => void): void {
  * in the inventory now, so there is nothing left to infer.
  */
 export function isOwned(id: string): boolean {
-  if (ADMIN.freeStock) return true
   return owned.has(id)
+}
+
+/**
+ * Whether they may put this in their hand.
+ *
+ * Not the same question as owning it, and the difference is ADMIN.freeStock.
+ * Owning is what the shop draws from: with freeStock folded into isOwned every
+ * row read EQUIP, no price was ever shown, and buying could not be reached at
+ * all, let alone tested. So ownership is now the plain truth and freeStock
+ * lives here instead, where it does the job it was written for: letting you
+ * hold anything in the catalogue while you are building.
+ *
+ * The server draws the same line. Its equip handler skips the ownership check
+ * under freeStock; its buy handler never does.
+ */
+export function canEquip(id: string): boolean {
+  return ADMIN.freeStock || owned.has(id)
 }
 
 export function equippedId(kind: ItemKind): string {
@@ -502,6 +492,21 @@ export function clubPower(): number {
 }
 
 /**
+ * Linear damping for the club in hand: how quickly the roll dies away.
+ *
+ * This matters more to how far a shot goes than power does. cannon applies
+ * damping as v *= (1 - d) per second, so the roll works out at roughly
+ * launch / -ln(1 - d): dropping d from 0.5 to 0.25 more than doubles the
+ * distance on its own, before any power multiplier.
+ *
+ * Which is why predictRoll() has to read this rather than assume 0.5. It did
+ * assume it, and the HUD was quoting 24m for a club that actually rolled 58.
+ */
+export function clubDamping(): number {
+  return equippedItem('club').damping ?? 0.5
+}
+
+/**
  * Takes the inventory the server sent.
  *
  * Called on every ledger message, not just the first: a purchase is answered
@@ -516,8 +521,10 @@ export function syncInventory(ownedIds: string[], equippedIds: Partial<Record<It
   for (const kind of ['club', 'ball'] as ItemKind[]) {
     const want = equippedIds[kind]
     // Never equip something the server has not said they own — a stale id
-    // would leave them holding a club they did not buy.
-    if (!want || !isOwned(want)) continue
+    // would leave them holding a club they did not buy. Under freeStock the
+    // server will happily report an unowned item as equipped, which is the
+    // point of it, so the test goes through canEquip rather than isOwned.
+    if (!want || !canEquip(want)) continue
     if (equipped[kind] === want) continue
     equipped[kind] = want
     const item = itemById(want)
@@ -542,7 +549,7 @@ export function buy(id: string): void {
  * is sent the same message regardless, so the real path still runs underneath.
  */
 export function equip(id: string): void {
-  if (!isOwned(id)) return
+  if (!canEquip(id)) return
 
   if (ADMIN.freeStock) {
     const item = itemById(id)

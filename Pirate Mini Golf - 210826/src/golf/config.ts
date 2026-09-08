@@ -181,7 +181,64 @@ export const SKY = {
    * the galleon and the flags all sit on the deck properly. Wind it to 32400
    * for a longer morning shadow, or back to 79200 for the night look.
    */
-  fixedTime: 50400
+  fixedTime: 50400,
+
+  /**
+   * How dark the cave is, as the opacity of a black sheet over the screen.
+   *
+   * A screen overlay rather than the sky, because the sky cannot do this
+   * instantly. SkyboxTime always eases to a new time over a couple of seconds
+   * and its only option, transitionMode, picks which way round the sun travels
+   * to get there rather than how fast. An overlay is ours, so it goes on and
+   * off on the frame you cross the line.
+   *
+   * What it costs: this dims the picture rather than changing the light, so
+   * nothing casts a different shadow and a bright cave mouth stays bright,
+   * only darker. What it buys, besides being instant, is that it is local to
+   * the one player and leaves the sky alone for everyone, the golf course
+   * included.
+   *
+   * How to read the number: what gets through is 1 minus the alpha. 0.55 left
+   * 45% of the light, 0.91 leaves 9%, which is the five times darker that was
+   * asked for. The scale is not linear in feel — every step towards 1 takes a
+   * bigger bite than the last, and 1.0 is a black screen.
+   *
+   *   0.55  dim, everything still legible
+   *   0.75  properly gloomy, scrap hard to spot by eye
+   *   0.91  five times darker than 0.55  <- here
+   *   0.97  you are finding things by sound alone
+   *
+   * At 0.91 the detector is doing most of the work: the clicking speeds up as
+   * you close on a find and the scrap lifts out of the floor within 5m, both
+   * of which still read in the dark. Finding scrap by eye does not, which is
+   * the trade being made rather than a side effect.
+   */
+  caveDarkness: 0.91,
+
+  /**
+   * Patches of the cave that stay in daylight.
+   *
+   * The route is one loop and the mouth is part of it, so being inside the
+   * zone is not the same as being underground. Anywhere within `radius` of one
+   * of these keeps the ordinary sky, whatever the corridor says.
+   *
+   * The radius used to be doing a second job, giving the skybox twenty metres
+   * of warning to finish easing before you arrived. The overlay does not ease,
+   * so that reason is gone and the radius is free to mean what it says: this
+   * much around this point stays light.
+   *
+   * One entry now rather than two. The second used to cancel the overhang left
+   * by the old widened-line zone, which claimed twelve metres of open ground
+   * outside the mouth as cave; the collider-derived zones do not make that
+   * mistake, so the approach is light because it is genuinely not in the cave.
+   *
+   * What is left is the line itself: four metres around the spot that was
+   * walked, so the picture drops as you pass it going in and comes back as you
+   * pass it going out, there rather than somewhere along the approach.
+   *
+   * Add a line per mouth. Walk to it and read the log, same as the zones.
+   */
+  daylight: [{ x: 77.41, z: 41.79, radius: 4 }]
 }
 
 /** The two holes you can play without signing on: practice, and the secret one. */
@@ -324,6 +381,21 @@ export const POINTS = {
 
 export const NET = {
   /** Seconds between ball position updates while the ball is moving. */
+  /**
+   * How long a player can be out of the scene before their ball is taken away.
+   *
+   * A synced row does not vanish when its owner does. The explorer's leave
+   * event covers the tidy cases and misses a hard disconnect, which is how a
+   * ball is left sitting on the eighth green belonging to somebody who closed
+   * their laptop ten minutes ago.
+   *
+   * So absence is measured as well as listened for, and this is the grace
+   * period. Long enough that a moment of network trouble does not blink
+   * everyone's ball off the course, short enough that a ghost does not outlast
+   * the hole it is standing on.
+   */
+  goneAfter: 4,
+
   ballPublishInterval: 0.1,
   /** How hard remote balls are pulled toward their last published position. */
   smoothing: 12,
@@ -425,12 +497,59 @@ export const BOARD = {
    * — auto-fitting to a wrong box just gets the wrong size on its own.
    */
   titleSize: 2.1,
-  listY: -0.2,
-  listSize: 1.4,
+
+  /**
+   * Two fixed lines under the title, and nothing that grows.
+   *
+   * The sign used to print the roster: every player who signed on added a
+   * line, the block was centred, so it grew up into the title and down off the
+   * parchment at the same time. Two players in and the heading was being
+   * written through.
+   *
+   * It does not need to name anybody. Who is playing and how they are doing is
+   * the standings panel's job, on screen, where there is room for it and where
+   * it is legible from anywhere on the island. The sign has one thing to say —
+   * that you can join and how — and one number worth glancing at.
+   *
+   * So: a prompt line and a count line, each its own TextShape at its own
+   * height, both a single line whatever is happening. Nothing here can
+   * overflow because nothing here can grow.
+   */
+  promptY: 0.02,
+  promptSize: 1.3,
+  countY: -0.24,
+  countSize: 1.0,
+
+  /**
+   * The putter painted on the sign in place of the letter E, on phones only.
+   *
+   * A TextShape cannot hold a picture, so the icon is a separate plane laid
+   * over the lettering and the join line is padded with spaces to leave it
+   * room. That means its position has to be worked out from the text rather
+   * than inherited from it, and the three measurements below are what that
+   * sum needs. All three are hand-measured, the same way titleSize was, and
+   * all three are worth nudging by eye rather than re-deriving.
+   *
+   * charWidth is one character of promptSize text: 0.065 x 1.3, the same rule
+   * the title is sized by. It says how far left of centre the padding reaches.
+   *
+   * The vertical sum has gone. The prompt is one line at a fixed height, so
+   * the icon sits at BOARD.promptY and nothing that happens in the game can
+   * move it. If it sits too close to the wording or too far from it, change
+   * pad; the icon does not move when you do, the gap either side of it does.
+   */
+  joinIcon: {
+    src: 'assets/scene/ui/icons/swing.png',
+    /** Height and width of the icon, in metres. */
+    size: 0.18,
+    /** One character of promptSize text, in metres: 0.065 x 1.3. */
+    charWidth: 0.0845,
+    /** Spaces held open at the head of the join line for the icon to sit in. */
+    pad: 3
+  },
 
   /** How close you have to be for the join prompt to appear. */
   reach: 6,
-  maxNames: 8,
   refreshInterval: 0.5
 }
 
@@ -833,6 +952,141 @@ const OUTFIT_SHELLMAN = [
  */
 const VOICE_DIR = 'assets/scene/Golf/sounds/voice'
 
+/**
+ * Bones, for Sally's quest about who was here before.
+ *
+ * They are not scenery and they are not a permanent collectible. They exist
+ * only while that one quest is running: taken it, and the island has bones on
+ * it; not taken it or already handed in, and there is not a bone anywhere. A
+ * pile of bones that is always there says nothing, and one that appears the
+ * day she asks about them says exactly what it should.
+ *
+ * Every player sees their own, the same bargain the shells make. Nothing about
+ * a bone is shared, so two people can be looking in the same cave without one
+ * of them clearing it for the other.
+ *
+ * Where they are is not invented. Every coordinate below is a point the scene
+ * already knew was on the ground: the cave list is the old buried-find sites
+ * and the motor's candidate spots, all of them inside DETECTOR.cave and all
+ * measured off the cave's own floor geometry, and the island list is the dig
+ * ring, which walks the whole coast. Making up coordinates for a place with
+ * this much vertical relief is how you get bones inside a rock.
+ */
+/**
+ * Coconutty's bar, which is authored in the scene and hidden until it is earned.
+ *
+ * The three props sit on the deck beside him in Creator Hub, so they load with
+ * everything else. bar.ts takes them out at startup and puts them back once
+ * this player has finished the blender chain, which is what turns a corner of
+ * empty decking into somewhere you can buy a drink.
+ *
+ * Named exactly as Creator Hub names them, extension and all, because that is
+ * what the Name component holds. The lookup ignores case, so renaming Table.glb
+ * to table.glb will not break it, but renaming it to Bar Table.glb will — and
+ * the console says so at startup rather than leaving you with a bar that never
+ * appears.
+ */
+export const BAR = {
+  props: ['Table.glb', 'Blender.glb', 'Pina Colada.glb'],
+  /**
+   * Seconds between asking whether the blender is built.
+   *
+   * It is a question about a wallet and a wallet changes once a session at
+   * most, so a second late is a second nobody will catch.
+   */
+  checkInterval: 1
+}
+
+export const BONES = {
+  /**
+   * The quest they belong to. Nothing spawns unless this one is running.
+   *
+   * By id rather than by a flag, so the quest list stays the only place a
+   * quest is described.
+   */
+  questId: 'scrap-others',
+
+  /** The two models, chosen at random per bone. */
+  models: ['assets/scene/Bones/Bone.glb', 'assets/scene/Bones/Skull.glb'],
+
+  /**
+   * How many are out at once, against how many places there are to put them.
+   *
+   * Fewer than there are spots on purpose, same as the shells: a collected
+   * bone comes back somewhere you are not standing, which is the difference
+   * between searching an island and farming a corner of it.
+   */
+  outAtOnce: 16,
+  /** Long, because these are meant to be searched for rather than harvested. */
+  respawnSeconds: 120,
+
+  /** Clickable from here on a desktop. */
+  reach: 4,
+  /** And walked over on a phone, where clicking a bone is an unfair ask. */
+  walkOver: true,
+  walkOverRadius: 1.3,
+  walkOverHeight: 2.5,
+
+  /**
+   * Size and click box.
+   *
+   * Both guesses until somebody stands next to one: the models arrived today
+   * and nothing here has seen them at scene scale. If a bone comes out the
+   * size of a boat or a crumb, `scale` is the only number to touch.
+   */
+  scale: 1,
+  hitbox: 0.6,
+
+  /** Cave first, then the island, so the console log reads in that order. */
+  spots: [
+    // --- the cave: old dig sites and the motor's candidate spots ---
+    { x: 90.46, y: 1.56, z: 25.07 },
+    { x: 99.61, y: 0.62, z: 25.09 },
+    { x: 107.78, y: 0.68, z: 26.77 },
+    { x: 82.31, y: 0.62, z: 31.61 },
+    { x: 103.82, y: 0.55, z: 32.27 },
+    { x: 89.73, y: 0.75, z: 33.23 },
+    { x: 97.16, y: 0.42, z: 34.54 },
+    { x: 106.64, y: 0.76, z: 39.48 },
+    { x: 79.94, y: 0.04, z: 39.85 },
+    { x: 86.19, y: 0.82, z: 41.75 },
+    { x: 94.15, y: 0.75, z: 46.23 },
+    { x: 102.03, y: 1.44, z: 46.32 },
+    { x: 79.74, y: 0.56, z: 48.16 },
+    { x: 104.74, y: 2.10, z: 53.72 },
+    { x: 103.75, y: 0.91, z: 23.99 },
+    { x: 96.16, y: 2.12, z: 28.05 },
+    { x: 88.53, y: 1.90, z: 28.64 },
+    { x: 84.47, y: 0.24, z: 36.01 },
+    { x: 75.88, y: 3.49, z: 37.79 },
+    { x: 100.34, y: 0.47, z: 38.70 },
+    { x: 90.84, y: 0.55, z: 40.64 },
+    { x: 86.29, y: 0.65, z: 47.45 },
+    { x: 101.51, y: 2.60, z: 51.04 },
+    // --- the island: the dig ring, which walks the whole coast ---
+    { x: 78.56, y: 0.69, z: 1.19 },
+    { x: 69.16, y: 0.9, z: -25.7 },
+    { x: 52.96, y: 0.72, z: -42.16 },
+    { x: 22.28, y: 0.91, z: -38.64 },
+    { x: -11.33, y: 0.95, z: -28.15 },
+    { x: -34.46, y: 0.65, z: -33.17 },
+    { x: -34.53, y: 1.04, z: 2.99 },
+    { x: -52.19, y: 0.97, z: 20.68 },
+    { x: -43.94, y: 1.04, z: 51.21 },
+    { x: -25.33, y: 0.92, z: 102.89 },
+    { x: 20.27, y: 1.0, z: 124.15 },
+    { x: 77.57, y: 0.92, z: 88.24 },
+    { x: 81.76, y: 0.79, z: 14.89 },
+    { x: 73.86, y: 0.79, z: -12.25 },
+    { x: 61.06, y: 0.81, z: -33.93 },
+    { x: 37.62, y: 0.81, z: -40.4 },
+    { x: -22.89, y: 0.8, z: -30.66 },
+    { x: -43.36, y: 1.0, z: 11.84 },
+    { x: -48.06, y: 1.0, z: 35.95 },
+    { x: 80.93, y: 0.95, z: 73.58 }
+  ]
+}
+
 export const PICKUP_SOUND = {
   /**
    * What a shell and a coconut sound like when you take one.
@@ -1153,9 +1407,20 @@ const OUTFIT_SALLY = [
 export const SALLY = {
   id: 'sally',
   name: 'Cave Explorer Sally',
-  /** Walked to and read off the position log, facing included. */
-  position: { x: 104.72, y: 1.83, z: 43.84 },
-  facingDegrees: -164,
+  /**
+   * Walked to and read off the position log, facing included.
+   *
+   * Moved with the cave rebuild, from (104.72, 1.83, 43.84) facing -164.
+   *
+   * Worth knowing: she now stands a long way from where the digging happens.
+   * The scrap field is over by the Cave.glb at around x 9, z 15, so she hands
+   * the detector over here and the sweeping is a walk away. Nothing in the
+   * code minds — the detector comes out on the cave box below, not on her —
+   * but it is a deliberate-looking gap rather than an accident, so it is
+   * written down.
+   */
+  position: { x: 94.81, y: 5.15, z: 40.03 },
+  facingDegrees: -89,
   bodyShape: 'urn:decentraland:off-chain:base-avatars:BaseFemale',
   wearables: OUTFIT_SALLY,
   /**
@@ -1220,17 +1485,121 @@ export const DETECTOR = {
   gripOffset: { x: 0, y: 0, z: 0 },
 
   /**
-   * The cave mouth, as a flat box in world space.
+   * The cave, read off its own collider.
    *
-   * Walk in and the detector comes out on its own; walk out and it goes away
-   * again. Taken from the dig sites themselves — they span x 79.7..107.8 and
-   * z 25.1..53.7, and Sally stands inside that — plus 7m of margin so the
-   * change happens as you arrive rather than once you are stood on a find.
+   * Not a box and not a walked line. Cave.glb carries a Cave_Collider mesh, so
+   * the shape is knowable rather than guessable: cast a ray down every 4m over
+   * the whole map and a column counts as cave when it has a floor between -2
+   * and 2.5 *and* something solid at 4m or above. Floor with a roof over it is
+   * what makes a cave; floor with sky over it is the beach.
    *
-   * A box rather than a radius because the pocket is longer than it is wide,
-   * and a circle big enough to cover it would reach out over the water.
+   * Those cells are then merged into the fewest rectangles that cover them,
+   * which is what this list is. Eighty-six of them, and being rectangles they
+   * can be read and nudged by hand, which a bitmap could not.
+   *
+   * Checked against the twenty positions walked and logged in the cave: all
+   * twenty land inside. Checked against every tee and cup on the course: none
+   * of them do. That second test is not idle — some holes have rock arching
+   * over them and passed the floor-and-roof test on their own merits, so the
+   * course footprint is cut out explicitly before the merge.
+   *
+   * Two known imperfections, both deliberate. The collider has a hole in it
+   * around (53, -42), no geometry at all, so that patch is added by hand. And
+   * the mask is dilated by one cell before merging, so walls and doorways are
+   * forgiving rather than flickering as you brush past them.
+   *
+   * To rebuild after a model change, the recipe is above: floor plus roof,
+   * 4m grid, minus the course, merged.
    */
-  cave: { minX: 73, maxX: 115, minZ: 18, maxZ: 61 },
+  caveZones: [
+    { minX: -18.0, maxX: -6.0, minZ: -61.0, maxZ: -57.0 },
+    { minX: -22.0, maxX: -2.0, minZ: -57.0, maxZ: -49.0 },
+    { minX: 6.0, maxX: 22.0, minZ: -57.0, maxZ: -49.0 },
+    { minX: -26.0, maxX: -22.0, minZ: -53.0, maxZ: -49.0 },
+    { minX: 2.0, maxX: 6.0, minZ: -53.0, maxZ: -49.0 },
+    { minX: 42.0, maxX: 62.0, minZ: -53.0, maxZ: -45.0 },
+    { minX: -26.0, maxX: 38.0, minZ: -49.0, maxZ: -45.0 },
+    { minX: -26.0, maxX: 78.0, minZ: -45.0, maxZ: -29.0 },
+    { minX: -42.0, maxX: -26.0, minZ: -41.0, maxZ: -29.0 },
+    { minX: 78.0, maxX: 82.0, minZ: -41.0, maxZ: -29.0 },
+    { minX: -46.0, maxX: -42.0, minZ: -37.0, maxZ: -21.0 },
+    { minX: 82.0, maxX: 90.0, minZ: -37.0, maxZ: -13.0 },
+    { minX: -42.0, maxX: -10.0, minZ: -29.0, maxZ: -5.0 },
+    { minX: -10.0, maxX: 14.0, minZ: -29.0, maxZ: -25.0 },
+    { minX: 26.0, maxX: 34.0, minZ: -29.0, maxZ: -25.0 },
+    { minX: 34.0, maxX: 58.0, minZ: -29.0, maxZ: -21.0 },
+    { minX: 58.0, maxX: 82.0, minZ: -29.0, maxZ: 3.0 },
+    { minX: -10.0, maxX: -2.0, minZ: -25.0, maxZ: -21.0 },
+    { minX: 42.0, maxX: 46.0, minZ: -21.0, maxZ: -17.0 },
+    { minX: 46.0, maxX: 58.0, minZ: -21.0, maxZ: -13.0 },
+    { minX: -46.0, maxX: -42.0, minZ: -17.0, maxZ: -13.0 },
+    { minX: -10.0, maxX: -6.0, minZ: -17.0, maxZ: -5.0 },
+    { minX: -50.0, maxX: -42.0, minZ: -13.0, maxZ: -1.0 },
+    { minX: 50.0, maxX: 58.0, minZ: -13.0, maxZ: -9.0 },
+    { minX: 82.0, maxX: 86.0, minZ: -13.0, maxZ: -9.0 },
+    { minX: 54.0, maxX: 58.0, minZ: -9.0, maxZ: -5.0 },
+    { minX: -42.0, maxX: -34.0, minZ: -5.0, maxZ: -1.0 },
+    { minX: -34.0, maxX: -30.0, minZ: -5.0, maxZ: 59.0 },
+    { minX: -30.0, maxX: -26.0, minZ: -5.0, maxZ: -1.0 },
+    { minX: -22.0, maxX: -10.0, minZ: -5.0, maxZ: -1.0 },
+    { minX: 82.0, maxX: 86.0, minZ: -5.0, maxZ: 3.0 },
+    { minX: -54.0, maxX: -34.0, minZ: -1.0, maxZ: 111.0 },
+    { minX: -30.0, maxX: -18.0, minZ: -1.0, maxZ: 11.0 },
+    { minX: 62.0, maxX: 66.0, minZ: 3.0, maxZ: 7.0 },
+    { minX: 66.0, maxX: 70.0, minZ: 3.0, maxZ: 19.0 },
+    { minX: 70.0, maxX: 74.0, minZ: 3.0, maxZ: 39.0 },
+    { minX: 74.0, maxX: 86.0, minZ: 3.0, maxZ: 7.0 },
+    { minX: 74.0, maxX: 98.0, minZ: 7.0, maxZ: 75.0 },
+    { minX: 98.0, maxX: 102.0, minZ: 7.0, maxZ: 23.0 },
+    { minX: -58.0, maxX: -54.0, minZ: 15.0, maxZ: 19.0 },
+    { minX: -66.0, maxX: -54.0, minZ: 19.0, maxZ: 31.0 },
+    { minX: -70.0, maxX: -66.0, minZ: 23.0, maxZ: 27.0 },
+    { minX: 98.0, maxX: 106.0, minZ: 23.0, maxZ: 43.0 },
+    { minX: -74.0, maxX: -66.0, minZ: 27.0, maxZ: 31.0 },
+    { minX: -30.0, maxX: -26.0, minZ: 27.0, maxZ: 39.0 },
+    { minX: -82.0, maxX: -78.0, minZ: 31.0, maxZ: 51.0 },
+    { minX: -78.0, maxX: -54.0, minZ: 31.0, maxZ: 55.0 },
+    { minX: 70.0, maxX: 74.0, minZ: 47.0, maxZ: 79.0 },
+    { minX: 98.0, maxX: 102.0, minZ: 47.0, maxZ: 51.0 },
+    { minX: 98.0, maxX: 106.0, minZ: 51.0, maxZ: 71.0 },
+    { minX: -70.0, maxX: -66.0, minZ: 55.0, maxZ: 59.0 },
+    { minX: -66.0, maxX: -54.0, minZ: 55.0, maxZ: 63.0 },
+    { minX: -62.0, maxX: -54.0, minZ: 63.0, maxZ: 67.0 },
+    { minX: -14.0, maxX: -10.0, minZ: 67.0, maxZ: 87.0 },
+    { minX: 66.0, maxX: 70.0, minZ: 67.0, maxZ: 79.0 },
+    { minX: 98.0, maxX: 102.0, minZ: 71.0, maxZ: 75.0 },
+    { minX: -34.0, maxX: -30.0, minZ: 75.0, maxZ: 83.0 },
+    { minX: 74.0, maxX: 90.0, minZ: 75.0, maxZ: 79.0 },
+    { minX: 62.0, maxX: 82.0, minZ: 79.0, maxZ: 95.0 },
+    { minX: 82.0, maxX: 86.0, minZ: 79.0, maxZ: 91.0 },
+    { minX: 86.0, maxX: 90.0, minZ: 79.0, maxZ: 83.0 },
+    { minX: -58.0, maxX: -54.0, minZ: 83.0, maxZ: 87.0 },
+    { minX: -34.0, maxX: -26.0, minZ: 83.0, maxZ: 95.0 },
+    { minX: -66.0, maxX: -54.0, minZ: 87.0, maxZ: 111.0 },
+    { minX: 58.0, maxX: 62.0, minZ: 87.0, maxZ: 91.0 },
+    { minX: -70.0, maxX: -66.0, minZ: 91.0, maxZ: 107.0 },
+    { minX: -26.0, maxX: -22.0, minZ: 91.0, maxZ: 95.0 },
+    { minX: 54.0, maxX: 62.0, minZ: 91.0, maxZ: 95.0 },
+    { minX: -34.0, maxX: -18.0, minZ: 95.0, maxZ: 115.0 },
+    { minX: 50.0, maxX: 82.0, minZ: 95.0, maxZ: 127.0 },
+    { minX: -18.0, maxX: -14.0, minZ: 99.0, maxZ: 107.0 },
+    { minX: 46.0, maxX: 50.0, minZ: 99.0, maxZ: 103.0 },
+    { minX: -14.0, maxX: -10.0, minZ: 103.0, maxZ: 107.0 },
+    { minX: 42.0, maxX: 50.0, minZ: 103.0, maxZ: 107.0 },
+    { minX: -18.0, maxX: -2.0, minZ: 107.0, maxZ: 115.0 },
+    { minX: 34.0, maxX: 38.0, minZ: 107.0, maxZ: 111.0 },
+    { minX: 38.0, maxX: 50.0, minZ: 107.0, maxZ: 131.0 },
+    { minX: 82.0, maxX: 86.0, minZ: 107.0, maxZ: 119.0 },
+    { minX: -62.0, maxX: -42.0, minZ: 111.0, maxZ: 115.0 },
+    { minX: -38.0, maxX: -34.0, minZ: 111.0, maxZ: 115.0 },
+    { minX: -2.0, maxX: 10.0, minZ: 111.0, maxZ: 115.0 },
+    { minX: 26.0, maxX: 38.0, minZ: 111.0, maxZ: 115.0 },
+    { minX: -34.0, maxX: -30.0, minZ: 115.0, maxZ: 119.0 },
+    { minX: -30.0, maxX: 38.0, minZ: 115.0, maxZ: 135.0 },
+    { minX: 58.0, maxX: 78.0, minZ: 127.0, maxZ: 131.0 },
+    { minX: -30.0, maxX: 18.0, minZ: 135.0, maxZ: 139.0 }
+  ],
+
 
   /**
    * What comes out of the ground, picked at random per site.
@@ -1300,23 +1669,21 @@ export const DETECTOR = {
    * It is only in the ground while Coconutty's motor quest is running, and
    * once dug it never comes back.
    *
-   * Measured, not guessed. Every one is a point on the cave's own floor
-   * geometry that is at least 4m from all fourteen ordinary dig sites, at
-   * least 6m from every other candidate, and clear of Sally. Four metres is
-   * comfortably outside the 1.6m dig range, so standing on the motor never
-   * puts you within reach of an ordinary find — the two cannot be confused at
-   * the moment it matters.
+   * Five, and each is the midpoint of one of the long runs between logged
+   * positions — the stretches with no ordinary dig site on them. So the motor
+   * is always somewhere you have to walk a way to reach rather than tripping
+   * over on the way past.
+   *
+   * The nearest one is 17.6m from the nearest dig site, well outside the 1.6m
+   * dig range, so standing on the motor never puts you within reach of an
+   * ordinary find. The two cannot be confused at the moment it matters.
    */
   motorSpots: [
-    { x: 103.75, y: 0.91, z: 23.99 },
-    { x: 96.16, y: 2.12, z: 28.05 },
-    { x: 88.53, y: 1.90, z: 28.64 },
-    { x: 84.47, y: 0.24, z: 36.01 },
-    { x: 75.88, y: 3.49, z: 37.79 },
-    { x: 100.34, y: 0.47, z: 38.70 },
-    { x: 90.84, y: 0.55, z: 40.64 },
-    { x: 86.29, y: 0.65, z: 47.45 },
-    { x: 101.51, y: 2.60, z: 51.04 }
+    { x: 5.48, y: 0.93, z: -33.39 },
+    { x: -34.5, y: 0.84, z: -15.09 },
+    { x: -34.63, y: 0.98, z: 77.05 },
+    { x: -2.53, y: 0.96, z: 113.52 },
+    { x: 48.92, y: 0.96, z: 106.19 }
   ],
   /** The motor itself, rather than a piece of scrap standing in for it. */
   motorModel: 'assets/scene/Motor/Motor.glb',
@@ -1328,21 +1695,48 @@ export const DETECTOR = {
    */
   motorScale: 1.5,
 
+  /**
+   * Where the scrap is.
+   *
+   * Every one of these is measured. Fifteen are positions read straight off
+   * the position log while walking the cave, and the other eleven are the
+   * midpoints of the shorter runs between them, which are on the same walked
+   * line. Nothing here is a guess about ground the walk did not cross, which
+   * is what the last version got wrong.
+   *
+   * Twenty-six rather than fourteen because the cave is now a loop most of the
+   * way round the island. At fifteen the sweeping would be silent for forty
+   * metres at a stretch, which is not searching, it is commuting.
+   *
+   * The floor barely moves: every y here is between 0.57 and 1.04.
+   */
   spots: [
-    { x: 90.46, y: 1.56, z: 25.07 },
-    { x: 99.61, y: 0.62, z: 25.09 },
-    { x: 107.78, y: 0.68, z: 26.77 },
-    { x: 82.31, y: 0.62, z: 31.61 },
-    { x: 103.82, y: 0.55, z: 32.27 },
-    { x: 89.73, y: 0.75, z: 33.23 },
-    { x: 97.16, y: 0.42, z: 34.54 },
-    { x: 106.64, y: 0.76, z: 39.48 },
-    { x: 79.94, y: 0.04, z: 39.85 },
-    { x: 86.19, y: 0.82, z: 41.75 },
-    { x: 94.15, y: 0.75, z: 46.23 },
-    { x: 102.03, y: 1.44, z: 46.32 },
-    { x: 79.74, y: 0.56, z: 48.16 },
-    { x: 104.74, y: 2.10, z: 53.72 }
+    { x: 86.15, y: 0.7, z: 50.97 },
+    { x: 84.96, y: 0.9, z: 28.59 },
+    { x: 78.56, y: 0.69, z: 1.19 },
+    { x: 69.16, y: 0.9, z: -25.7 },
+    { x: 52.96, y: 0.72, z: -42.16 },
+    { x: 22.28, y: 0.91, z: -38.64 },
+    { x: -11.33, y: 0.95, z: -28.15 },
+    { x: -34.46, y: 0.65, z: -33.17 },
+    { x: -34.53, y: 1.04, z: 2.99 },
+    { x: -52.19, y: 0.97, z: 20.68 },
+    { x: -43.94, y: 1.04, z: 51.21 },
+    { x: -25.33, y: 0.92, z: 102.89 },
+    { x: 20.27, y: 1.0, z: 124.15 },
+    { x: 77.57, y: 0.92, z: 88.24 },
+    { x: 84.29, y: 0.97, z: 58.93 },
+    { x: 81.34, y: 0.64, z: 46.52 },
+    { x: 85.56, y: 0.8, z: 39.78 },
+    { x: 81.76, y: 0.79, z: 14.89 },
+    { x: 73.86, y: 0.79, z: -12.25 },
+    { x: 61.06, y: 0.81, z: -33.93 },
+    { x: 37.62, y: 0.81, z: -40.4 },
+    { x: -22.89, y: 0.8, z: -30.66 },
+    { x: -43.36, y: 1.0, z: 11.84 },
+    { x: -48.06, y: 1.0, z: 35.95 },
+    { x: 80.93, y: 0.95, z: 73.58 },
+    { x: 80.42, y: 0.77, z: 50.5 }
   ]
 }
 

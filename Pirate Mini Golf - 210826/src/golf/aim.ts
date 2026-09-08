@@ -80,6 +80,10 @@ export function setRingVisible(aim: Aim, visible: boolean): void {
   if (aim.ringVisible === visible) return
   aim.ringVisible = visible
   for (const seg of aim.ring) show(seg, visible)
+  // Coming back into view counts as having moved: the ball may well be
+  // somewhere else since the ring was last drawn, and the cached position
+  // would otherwise leave it behind on the last hole.
+  if (visible) invalidateRing()
 }
 
 export function setLineVisible(aim: Aim, visible: boolean): void {
@@ -90,12 +94,41 @@ export function setLineVisible(aim: Aim, visible: boolean): void {
 }
 
 /**
+ * Where the ring was last built, so it is only built when it has moved.
+ *
+ * This is the single most expensive thing the scene did per frame, and it did
+ * it at the worst possible moment. Every segment of the ring casts a ray at
+ * the course to find the floor under it, and the course is a 159,000-triangle
+ * mesh: twenty-four raycasts a frame, every frame, for the whole time you are
+ * stood over the ball with the meter running. That is exactly when the meter
+ * needs the frames, and exactly when the ball is about to need the physics.
+ *
+ * The ring is a circle around the ball on ground that does not move, so it
+ * only needs rebuilding when the ball is somewhere else. Standing still and
+ * looking around changes nothing about it. The line does move with your aim,
+ * but that is two rays rather than twenty-four.
+ */
+let ringAt = { x: Number.NaN, y: Number.NaN, z: Number.NaN }
+
+/** Force the next updateRing to rebuild, whatever the ball position says. */
+export function invalidateRing(): void {
+  ringAt = { x: Number.NaN, y: Number.NaN, z: Number.NaN }
+}
+
+/**
  * Lays the ring flat on whatever the ball is sitting on. Drawn on the floor
  * rather than around the ball in the air, because the thing that is hard to see
  * on this course is where the ball is *standing*.
  */
 export function updateRing(aim: Aim, probe: SurfaceProbe, x: number, y: number, z: number): void {
   if (!aim.ringVisible) return
+
+  // A centimetre of movement is not worth twenty-four rays. The ring is 90cm
+  // across, so a centimetre of error in where it sits is invisible.
+  const moved =
+    Math.abs(x - ringAt.x) > 0.01 || Math.abs(y - ringAt.y) > 0.01 || Math.abs(z - ringAt.z) > 0.01
+  if (!moved) return
+  ringAt = { x, y, z }
 
   const r = AIM.ringRadius
   const n = aim.ring.length

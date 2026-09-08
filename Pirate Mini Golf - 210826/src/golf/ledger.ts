@@ -63,6 +63,15 @@ type Wallet = {
   claims: string[]
   /** Quest id -> how many times the counted thing has happened. */
   quests: Record<string, number>
+  /**
+   * The switches in the settings tab, by key.
+   *
+   * Kept here with everything else about a player rather than in browser
+   * storage, so a setting survives a visit on a different device the same way
+   * a bought club does. Nothing on the server reads them — they are the
+   * client's business — but the server is the only thing that remembers.
+   */
+  settings: Record<string, boolean>
   /** Fewest strokes for the nine, for the personal best award. */
   best: number
   /** YYYY-MM-DD of the last completed round, for first-of-day. */
@@ -146,6 +155,7 @@ const empty = (): Wallet => ({
   lifetime: 0,
   claims: [],
   quests: {},
+  settings: {},
   best: 0,
   lastDay: '',
   lastRound: 0,
@@ -453,9 +463,22 @@ const today = () => new Date().toISOString().slice(0, 10)
 // Handlers
 // ---------------------------------------------------------------------------
 
-/** Everything this wallet may hold right now: bought, plus free and unlocked. */
+/**
+ * Everything this wallet may hold right now: bought, plus free and unlocked.
+ *
+ * Deliberately no freeStock branch. It used to return the whole catalogue,
+ * which meant a tester owned everything: every row in the shop read EQUIP, no
+ * price was ever drawn, and nothing could be bought, because buying something
+ * you already own is refused at both ends. Unlocking then looked like being
+ * given the thing, since being given it and already owning it are the same
+ * picture.
+ *
+ * freeStock still does its job, one step further along: the equip handler
+ * below skips the ownership check while it is on, so anything in the catalogue
+ * can be held for testing without being paid for. What it no longer does is
+ * lie about what has been bought.
+ */
 function ownedIds(wallet: Wallet): string[] {
-  if (ADMIN.freeStock) return CATALOGUE.map((i) => i.id)
   const level = levelFor(wallet.lifetime)
   const free = CATALOGUE.filter(
     (i) => i.price <= 0 && isUnlocked(i, level, wallet.claims)
@@ -476,6 +499,34 @@ function shellsTodayFor(wallet: Wallet): number {
 /** The same, for coconuts. A stale day reads as zero rather than being reset. */
 function coconutsTodayFor(wallet: Wallet): number {
   return wallet.coconutsDay === today() ? wallet.coconutsToday : 0
+}
+
+/** The quest the jug coconuts belong to. */
+const JUG_QUEST = 'blender-vessel'
+
+/**
+ * How many coconuts the jug still wants from this wallet.
+ *
+ * The whole of the separation is this one number. Coconutty takes twelve a day
+ * for himself and turns the rest away, which was fine while the only thing
+ * coconuts did was count towards the hundred — but it also stalled the jug,
+ * because the jug counted the same hand-over. Somebody who had already given
+ * him his twelve could not give him the makings of a jug until tomorrow, and a
+ * quest you cannot progress by doing the thing it asks for reads as broken.
+ *
+ * So the jug gets its own allowance, and it is not a daily one: it is what the
+ * quest has left to want, which is at most twelve ever. Read off the quest
+ * itself rather than a number kept here, so the two cannot drift apart.
+ *
+ * Claimed means finished, and finished means it wants nothing. The client only
+ * offers the hand-over while the quest is running, but the server is what
+ * decides, and 'has the client asked nicely' is not a thing it can check.
+ */
+function jugOutstanding(wallet: Wallet): number {
+  const quest = QUESTS.find((q) => q.id === JUG_QUEST)
+  if (!quest) return 0
+  if (wallet.claims.indexOf(`quest:${JUG_QUEST}`) >= 0) return 0
+  return Math.max(0, quest.target - (wallet.quests[JUG_QUEST] ?? 0))
 }
 
 /**
@@ -507,10 +558,6 @@ function sendLedger(address: string, wallet: Wallet): void {
       // half a player would finish Three Aces and find the Flag Club unlocked,
       // unowned and unequippable. The client used to decide this by treating
       // every zero-price item as owned, which handed all four out on day one.
-      //
-      // freeStock is the testing switch, and this is the half of it that makes
-      // the ordinary path work: the client is told it owns the catalogue, so
-      // the inventory, the equip request and what comes back all agree.
       owned: JSON.stringify(ownedIds(wallet)),
       equipped: JSON.stringify(wallet.equipped),
       scrapCarried: wallet.scrapCarried,
@@ -525,6 +572,15 @@ function sendLedger(address: string, wallet: Wallet): void {
       motor: wallet.motor,
       durable: isWallet(address)
     },
+    { to: [address] }
+  )
+
+  // Alongside rather than inside. Every wallet send carries the settings too,
+  // so the client gets them at the same moment it gets everything else, but a
+  // failure on either message cannot take the other one with it.
+  void room.send(
+    'mySettings',
+    { json: JSON.stringify(wallet.settings) },
     { to: [address] }
   )
 }
@@ -867,6 +923,47 @@ export function runLedger(): void {
     sendLedger(address, wallet)
   })
 
+  /**
+   * Coconuts for the jug, which is a different errand to coconuts for him.
+   *
+   * Everything here is deliberately not the handCoconuts handler above: no
+   * daily limit, no coconutsToday, no coconutsTotal, and therefore nothing
+   * towards the hundred. What it does move is the quest itself, on the server,
+   * so a hand-over that the client's own progress report never reaches is
+   * still counted — and the client's later report is a no-op rather than a
+   * disagreement, because that handler only ever accepts an increase.
+   *
+   * They are still paid for at the usual rate. He is still getting coconuts,
+   * and pay() carries the daily earnings cap with it, so this is not a way
+   * round anything.
+   */
+  room.onMessage('handJugCoconuts', async (_data, context) => {
+    const address = context?.from
+    if (!address) return
+    const wallet = await load(address)
+
+    const need = jugOutstanding(wallet)
+    const taken = Math.min(wallet.coconutsCarried, need)
+
+    if (taken > 0) {
+      wallet.coconutsCarried -= taken
+      wallet.quests[JUG_QUEST] = (wallet.quests[JUG_QUEST] ?? 0) + taken
+      if (canEarn(address)) pay(wallet, taken * COCONUTS.pointsPerCoconut)
+      touch(address)
+    }
+
+    void room.send(
+      'jugCoconutsTaken',
+      {
+        taken,
+        paid: canEarn(address) ? taken * COCONUTS.pointsPerCoconut : 0,
+        need: jugOutstanding(wallet)
+      },
+      { to: [address] }
+    )
+    sendLedger(address, wallet)
+  })
+
   room.onMessage('motor', async (_data, context) => {
     const address = context?.from
     if (!address) return
@@ -912,6 +1009,33 @@ export function runLedger(): void {
     // say, and it is the only half of this that costs anything.
     void room.send('drink', { seconds: DRINK.seconds }, { to: [address] })
     sendLedger(address, wallet)
+  })
+
+  /**
+   * A switch moved in somebody's settings tab.
+   *
+   * The only message here that the server does not check the meaning of. A
+   * setting is a preference about that player's own screen: there is no
+   * cheating it, nothing is paid for it, and the server's whole job is to hand
+   * the same answer back next time. So the key is taken as given and the value
+   * is coerced to a boolean, which is the only guarantee worth making.
+   *
+   * Not flushed on its own timer either. touch() marks the wallet and the
+   * existing flush writes it with everything else, so a player flicking a
+   * switch back and forth is one write rather than ten.
+   */
+  room.onMessage('settings', async (data, context) => {
+    const address = context?.from
+    if (!address) return
+    // An empty key would make a wallet entry nothing can ever read back.
+    const key = data.key
+    if (!key) return
+
+    const wallet = await load(address)
+    if (wallet.settings[key] === data.on) return
+
+    wallet.settings[key] = data.on
+    touch(address)
   })
 
   room.onMessage('quest', async (data, context) => {

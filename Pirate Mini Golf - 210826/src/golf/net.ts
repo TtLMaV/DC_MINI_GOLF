@@ -1,18 +1,24 @@
 import {
+  AvatarAnchorPointType,
+  AvatarAttach,
   Billboard,
   engine,
   Entity,
+  GltfContainer,
   Material,
   MeshRenderer,
   Schemas,
   TextShape,
-  Transform
+  Transform,
+  VisibilityComponent
 } from '@dcl/sdk/ecs'
-import { Color3, Color4, Vector3 } from '@dcl/sdk/math'
+import { Color3, Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
 import { isStateSyncronized, syncEntity } from '@dcl/sdk/network'
 import { getPlayer, onLeaveScene } from '@dcl/sdk/players'
 import { HOLES } from './course'
-import { NET } from './config'
+import { CLUB, NET } from './config'
+import { itemById } from './shop'
+import { ballModelScale } from './ball'
 
 /**
  * Multiplayer, without a server.
@@ -50,7 +56,18 @@ export const GolfPlayer = engine.defineComponent('golf::player', {
   /** Their ball, so everyone can watch everyone else's shots. */
   bx: Schemas.Float,
   by: Schemas.Float,
-  bz: Schemas.Float
+  bz: Schemas.Float,
+  /**
+   * What they are holding, as catalogue ids.
+   *
+   * Ids rather than model paths, for the same reason the shop equips by id:
+   * the mapping from an item to a .glb is the catalogue's business, and a path
+   * on the wire would be a second copy of it, free to go stale the day an
+   * asset is renamed. Empty until they have published, which is what the
+   * fallbacks below are for.
+   */
+  ballId: Schemas.String,
+  clubId: Schemas.String
 })
 
 export type GolfPlayerState = {
@@ -64,6 +81,8 @@ export type GolfPlayerState = {
   bx: number
   by: number
   bz: number
+  ballId: string
+  clubId: string
 }
 
 let mine: Entity | undefined
@@ -73,8 +92,62 @@ let myName = 'Player'
 /** Anyone who has walked out. Their entity may linger for a moment. */
 const departed = new Set<string>()
 
-/** Locally-built visuals for other people's balls, keyed by their entity. */
-const visuals = new Map<Entity, { ball: Entity; label: Entity }>()
+/**
+ * Anyone whose row is still here but who is not.
+ *
+ * departed is fed by the explorer's leave event, which is reliable for a
+ * player who walks out of the scene and is not reliable for one who closes the
+ * tab or loses their connection. Their synced row stays behind either way, and
+ * with it their ball — parked wherever it was when they went, on a green
+ * somebody else is trying to putt on.
+ *
+ * So presence is checked as well as listened for. getPlayer answers whether
+ * the explorer still knows about them, and a row whose owner has been
+ * unanswered for NET.goneAfter seconds stops counting: no ball, no club, no
+ * label, and off the sign-up board and the standings with it.
+ *
+ * Not permanent, which is the difference between this and departed. Somebody
+ * who wandered off the parcels and comes back is simply present again and gets
+ * their ball back. Marking them gone for good would punish walking to the
+ * beach.
+ */
+const absent = new Set<string>()
+const unseenFor = new Map<string, number>()
+
+function stillHere(userId: string, dt: number): boolean {
+  if (getPlayer({ userId }) !== null) {
+    if (unseenFor.size > 0) unseenFor.delete(userId)
+    absent.delete(userId)
+    return true
+  }
+
+  const gone = (unseenFor.get(userId) ?? 0) + dt
+  unseenFor.set(userId, gone)
+  if (gone < NET.goneAfter) return true
+
+  absent.add(userId)
+  return false
+}
+
+/**
+ * Locally-built visuals for other people, keyed by their entity.
+ *
+ * `ballId` and `clubId` are what is currently *drawn*, not what they are
+ * holding. Kept so the models are only swapped when they actually change: a
+ * GltfContainer whose src is rewritten reloads the asset, and rewriting it
+ * every frame with the same string would reload it every frame.
+ */
+type Visual = {
+  ball: Entity
+  sphere: Entity
+  model: Entity
+  label: Entity
+  club: Entity
+  clubModel: Entity
+  ballId: string
+  clubId: string
+}
+const visuals = new Map<Entity, Visual>()
 
 /** Throttle on publishing ball position — see publishBall. */
 let ballClock = 0
@@ -143,7 +216,9 @@ export function setupNet(): void {
     round: 0,
     bx: 0,
     by: -100,
-    bz: 0
+    bz: 0,
+    ballId: '',
+    clubId: ''
   })
 
   // No entityEnumId: this entity is created at runtime per player, so the
@@ -207,7 +282,7 @@ export function roster(): GolfPlayerState[] {
   const out: GolfPlayerState[] = []
   for (const [, state] of engine.getEntitiesWith(GolfPlayer)) {
     if (!state.joined) continue
-    if (departed.has(state.userId)) continue
+    if (departed.has(state.userId) || absent.has(state.userId)) continue
     out.push(state as unknown as GolfPlayerState)
   }
   return out
@@ -217,7 +292,7 @@ export function roster(): GolfPlayerState[] {
 export function present(): GolfPlayerState[] {
   const out: GolfPlayerState[] = []
   for (const [, state] of engine.getEntitiesWith(GolfPlayer)) {
-    if (departed.has(state.userId)) continue
+    if (departed.has(state.userId) || absent.has(state.userId)) continue
     out.push(state as unknown as GolfPlayerState)
   }
   return out
@@ -249,29 +324,68 @@ export function publishBall(dt: number, x: number, y: number, z: number, moving:
   row.bz = z
 }
 
+/**
+ * What this player is holding, so everyone else can see it.
+ *
+ * Cheap and rare: two strings, written only when they change, which is a
+ * handful of times in a session. Unlike the ball position there is nothing to
+ * rate limit.
+ */
+export function publishGear(ballId: string, clubId: string): void {
+  const row = myRow()
+  if (!row) return
+  if (row.ballId !== ballId) row.ballId = ballId
+  if (row.clubId !== clubId) row.clubId = clubId
+}
+
 // ---------------------------------------------------------------------------
-// Other people's balls
+// Other people's balls and clubs
 // ---------------------------------------------------------------------------
 
-function makeVisual(name: string): { ball: Entity; label: Entity } {
+/** The .glb for a catalogue id, if there is one and it is the right kind. */
+function modelFor(id: string, kind: 'ball' | 'club'): string {
+  const item = id ? itemById(id) : undefined
+  return item && item.kind === kind && item.model ? item.model : ''
+}
+
+function makeVisual(state: GolfPlayerState): Visual {
+  // A holder at scale 1 that nothing but the position is written to, with the
+  // parts hung off it. The sphere used to be the ball itself, which meant its
+  // 0.2 scale was inherited by anything parented to it: a model hung there
+  // would have come out a fifth of its size.
   const ball = engine.addEntity()
-  MeshRenderer.setSphere(ball)
-  Material.setPbrMaterial(ball, {
+  Transform.create(ball, { position: Vector3.create(0, -100, 0) })
+
+  // The fallback, and the only thing anybody saw before this. Still here for
+  // the moment before a player has published what they are holding, and for
+  // anyone running a build old enough not to publish it at all.
+  const sphere = engine.addEntity()
+  Transform.create(sphere, {
+    scale: Vector3.create(NET.ballSize, NET.ballSize, NET.ballSize),
+    parent: ball
+  })
+  MeshRenderer.setSphere(sphere)
+  Material.setPbrMaterial(sphere, {
     albedoColor: Color4.create(0.55, 0.78, 1, 1),
     emissiveColor: Color3.create(0.4, 0.66, 1),
     emissiveIntensity: 0.35,
     metallic: 0,
     roughness: 0.4
   })
-  Transform.create(ball, {
-    position: Vector3.create(0, -100, 0),
-    scale: Vector3.create(NET.ballSize, NET.ballSize, NET.ballSize)
+  VisibilityComponent.create(sphere, { visible: true })
+
+  const scale = ballModelScale()
+  const model = engine.addEntity()
+  Transform.create(model, {
+    rotation: Quaternion.fromEulerDegrees(0, 180, 0),
+    scale: Vector3.create(scale, scale, scale),
+    parent: ball
   })
 
   const label = engine.addEntity()
   Transform.create(label, { position: Vector3.create(0, NET.labelHeight, 0), parent: ball })
   TextShape.create(label, {
-    text: name,
+    text: state.name,
     fontSize: NET.labelSize,
     textColor: Color4.create(0.8, 0.9, 1, 1),
     outlineWidth: 0.2,
@@ -279,7 +393,77 @@ function makeVisual(name: string): { ball: Entity; label: Entity } {
   })
   Billboard.create(label)
 
-  return { ball, label }
+  // Their club, hung off their own right hand rather than off the ball.
+  //
+  // avatarId is the whole trick: without it AvatarAttach binds to the local
+  // player, which is how the local club works and would have put every other
+  // player's club in your own fist. The grip offsets are the same ones the
+  // local club is carried at, so a club looks the same in anybody's hand.
+  const club = engine.addEntity()
+  AvatarAttach.create(club, {
+    avatarId: state.userId,
+    anchorPointId: AvatarAnchorPointType.AAPT_RIGHT_HAND
+  })
+
+  const grip = engine.addEntity()
+  Transform.create(grip, {
+    position: Vector3.create(CLUB.gripOffset.x, CLUB.gripOffset.y, CLUB.gripOffset.z),
+    rotation: Quaternion.fromEulerDegrees(
+      CLUB.gripRotation.x,
+      CLUB.gripRotation.y,
+      CLUB.gripRotation.z
+    ),
+    scale: Vector3.create(CLUB.scale, CLUB.scale, CLUB.scale),
+    parent: club
+  })
+
+  const clubModel = engine.addEntity()
+  Transform.create(clubModel, {
+    // The .glb models the face on -Z, same correction the local club makes.
+    rotation: Quaternion.fromEulerDegrees(0, 180, 0),
+    parent: grip
+  })
+
+  const vis: Visual = { ball, sphere, model, label, club, clubModel, ballId: '', clubId: '' }
+  dressVisual(vis, state)
+  return vis
+}
+
+/**
+ * Puts the right models on a visual, and does nothing when they are already
+ * right.
+ *
+ * Setting a GltfContainer's src is an asset load, so this is guarded on the
+ * id rather than called blindly every frame.
+ */
+function dressVisual(vis: Visual, state: GolfPlayerState): void {
+  if (vis.ballId !== state.ballId) {
+    vis.ballId = state.ballId
+    const src = modelFor(state.ballId, 'ball')
+    if (src) {
+      const gltf = GltfContainer.getMutableOrNull(vis.model)
+      if (gltf) gltf.src = src
+      else GltfContainer.create(vis.model, { src })
+    }
+    // The sphere stands in until there is a model, and steps aside once there
+    // is one. It is never removed, so an unknown id later on still has
+    // something to show rather than an invisible ball rolling about.
+    const v = VisibilityComponent.getMutableOrNull(vis.sphere)
+    if (v) v.visible = src === ''
+  }
+
+  if (vis.clubId !== state.clubId) {
+    vis.clubId = state.clubId
+    const src = modelFor(state.clubId, 'club')
+    const gltf = GltfContainer.getMutableOrNull(vis.clubModel)
+    if (src) {
+      if (gltf) gltf.src = src
+      else GltfContainer.create(vis.clubModel, { src })
+    } else if (gltf) {
+      // Nothing published yet: better an empty hand than the wrong club.
+      GltfContainer.deleteFrom(vis.clubModel)
+    }
+  }
 }
 
 /**
@@ -293,14 +477,19 @@ export function updateRemotes(dt: number): void {
   for (const [entity, state] of engine.getEntitiesWith(GolfPlayer)) {
     if (state.userId === myId) continue
     if (departed.has(state.userId)) continue
+    // Checked here rather than in a system of its own, because this is the
+    // one place that runs every frame and already has dt in its hand.
+    if (!stillHere(state.userId, dt)) continue
     // Signed up or not: if someone is putting, you can see their ball.
     if (state.by < -50) continue
     live.add(entity)
 
     let vis = visuals.get(entity)
     if (!vis) {
-      vis = makeVisual(state.name)
+      vis = makeVisual(state as unknown as GolfPlayerState)
       visuals.set(entity, vis)
+    } else {
+      dressVisual(vis, state as unknown as GolfPlayerState)
     }
 
     const t = Transform.getMutableOrNull(vis.ball)
@@ -314,7 +503,11 @@ export function updateRemotes(dt: number): void {
   // Anyone who left, unjoined, or whose entity has gone.
   for (const [entity, vis] of visuals) {
     if (live.has(entity)) continue
+    engine.removeEntity(vis.clubModel)
+    engine.removeEntity(vis.club)
     engine.removeEntity(vis.label)
+    engine.removeEntity(vis.model)
+    engine.removeEntity(vis.sphere)
     engine.removeEntity(vis.ball)
     visuals.delete(entity)
   }
