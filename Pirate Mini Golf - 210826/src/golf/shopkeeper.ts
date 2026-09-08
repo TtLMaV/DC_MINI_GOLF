@@ -4,6 +4,7 @@ import { balance } from './points'
 import { openShop } from './shop'
 import { POINTS } from './config'
 import { addQuests, questChoices } from './quests'
+import { t } from './strings'
 import { Game } from './game'
 
 /**
@@ -28,28 +29,39 @@ export function shopkeeperDialog(game: Game): Dialog {
 
   const dialog: Dialog = {
     start: {
+      // Fetched rather than written, so switching language in the settings
+      // panel changes what he says the next time he opens his mouth. A node
+      // whose text is a function is read fresh every time it is drawn, which
+      // this file was already relying on for the balance and the ball.
       text: () =>
-        `Hi, the names Salt, I've been running Putts 'n' Balls for years! Mini golf on an Island? Bit weird... but lets not ask questions. ` +
-        `You're using a ${currentSkin().name.toLowerCase()}, and you've ${balance()} ${POINTS.short} to your name. Feel free to get new gear here, once you level up!`,
+        t('salt.greeting', {
+          ball: currentSkin().name.toLowerCase(),
+          pp: balance(),
+          ppShort: POINTS.short
+        }),
       // A function now rather than a fixed list, because the quest tab only
       // exists once he has something to offer — below the level gate he has
       // nothing to say about the tenth and should not be hinting at it.
       choices: () => [
-        { label: 'Show me the balls', goto: '', act: () => openShop('ball') },
-        { label: 'Show me the clubs', goto: '', act: () => openShop('club') },
+        { label: t('salt.showBalls'), goto: '', act: () => openShop('ball') },
+        { label: t('salt.showClubs'), goto: '', act: () => openShop('club') },
         ...questChoices('shopkeeper'),
-        { label: 'Where do points come from?', goto: 'points' },
-        { label: 'Just passing', goto: '' }
+        { label: t('salt.wherePoints'), goto: 'points' },
+        { label: t('salt.justPassing'), goto: '' }
       ]
     },
 
     points: {
-      text:
-        'Play the nine. Finishing pays, and playing well pays better: pars, birdies, and the odd hole in one.' +
-        'Points are called Pixel Points and can be used to upgrade your gear or spent elsewhere within the Pixel Arcade ecosystem.',
+      // A function rather than a string, which it did not need to be before:
+      // a fixed string is baked at start-up, and this one has to be able to
+      // change language mid-session like everything else he says.
+      //
+      // It also gained a space. "hole in one.Points" ran together in every
+      // build this scene has ever had.
+      text: () => t('salt.points', { ppLong: POINTS.name }),
       choices: [
-        { label: 'Show me the balls', goto: '', act: () => openShop('ball') },
-        { label: 'Fair enough', goto: '' }
+        { label: t('salt.showBalls'), goto: '', act: () => openShop('ball') },
+        { label: t('salt.fairEnough'), goto: '' }
       ]
     }
   }

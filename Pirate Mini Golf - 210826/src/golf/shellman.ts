@@ -3,6 +3,7 @@ import { Dialog } from './npc'
 import { handShells, shellmanHasAnswered, shellsToday, shellsTotal } from './points'
 import { addQuests, questChoices, report } from './quests'
 import { shellsCarried } from './shells'
+import { t } from './strings'
 
 /**
  * What Shellman says.
@@ -28,21 +29,12 @@ export function shellmanDialog(): Dialog {
   const greeting = () => {
     const n = held()
     if (n === 0) {
-      return (
-        'Hello there traveller. You do not appear to be carrying any shells. ' +
-        'They are on the sand, I am far to important to be looking for them myself, I will reward you if you collect them.'
-      )
+      return t('shellman.greet.none')
     }
     if (roomLeft() === 0) {
-      return (
-        `You have ${n}. I have had my ${SHELLS.dailyLimit} today and I have written them down. ` +
-        'Come back tomorrow.'
-      )
+      return t('shellman.greet.full', { n, limit: SHELLS.dailyLimit })
     }
-    return (
-      `${n} shell${n === 1 ? '' : 's'}. I can take ${roomLeft()} more today. ` +
-      'Mind your own business.'
-    )
+    return t(n === 1 ? 'shellman.greet.one' : 'shellman.greet.many', { n, room: roomLeft() })
   }
 
   const dialog: Dialog = {
@@ -59,16 +51,16 @@ export function shellmanDialog(): Dialog {
         if (held() > 0 && roomLeft() > 0) {
           const taking = Math.min(held(), roomLeft())
           options.push({
-            label: `Hand over ${taking}`,
+            label: t('shellman.handOver', { n: taking }),
             goto: 'handed',
             act: () => handShells()
           })
         }
 
         options.push(...questChoices('shellman'))
-        options.push({ label: 'Why shells?', goto: 'why' })
-        options.push({ label: 'How many have I given you?', goto: 'tally' })
-        options.push({ label: 'I will leave you to it', goto: '' })
+        options.push({ label: t('shellman.whyShells'), goto: 'why' })
+        options.push({ label: t('shellman.howMany'), goto: 'tally' })
+        options.push({ label: t('shellman.leaveYou'), goto: '' })
         return options
       }
     },
@@ -84,46 +76,38 @@ export function shellmanDialog(): Dialog {
        * looked exactly like a working one.
        */
       text: () =>
-        shellmanHasAnswered()
-          ? 'He takes them without looking, turns each one over once, and puts it somewhere you cannot see. ' +
-            '"Counted," he says. "All of them counted."'
-          : 'He holds his hands out, and keeps holding them out. Nothing passes between you. ' +
-            '(The server has not answered — check the console for "[golf] LEDGER SILENT".)',
+        shellmanHasAnswered() ? t('shellman.handed') : t('shellman.handedSilent'),
       choices: [
-        { label: 'What do you do with them?', goto: 'why' },
-        { label: 'Right', goto: '' }
+        { label: t('shellman.whatDoYouDo'), goto: 'why' },
+        { label: t('shellman.right'), goto: '' }
       ]
     },
 
     why: {
-      text:
-        'A shell is a house somebody finished with. Somebody very small, who did not leave a note. ' +
-        'I keep them because it seems rude that nobody else does. That is the entire reason and I have never had a better one.',
+      text: () => t('shellman.why'),
       choices: [
-        { label: 'Do you ever stop?', goto: 'stop' },
-        { label: 'Fair enough', goto: '' }
+        { label: t('shellman.doYouStop'), goto: 'stop' },
+        { label: t('shellman.fairEnough'), goto: '' }
       ]
     },
 
     stop: {
-      text: () =>
-        `I take ${SHELLS.dailyLimit} a day. Not because I want ${SHELLS.dailyLimit}. Because past ${SHELLS.dailyLimit} ` +
-        'I stop seeing them, and a shell you have stopped seeing may as well still be on the beach.',
-      choices: [{ label: 'That is... reasonable', goto: '' }]
+      text: () => t('shellman.stop', { limit: SHELLS.dailyLimit }),
+      choices: [{ label: t('shellman.reasonable'), goto: '' }]
     },
 
     tally: {
       text: () => {
         const total = shellsTotal()
-        if (total === 0) return 'None. Not one. I would remember.'
+        if (total === 0) return t('shellman.tally.none')
         const left = Math.max(0, SHELLS.forTheClub - total)
         return left > 0
-          ? `${total}. Here is ${total} because I counted it ${total} times. ${left} short of the hundred.`
-          : `${total}. Past the hundred. We agreed not to speak of the hundred.`
+          ? t('shellman.tally.short', { total, left })
+          : t('shellman.tally.past', { total })
       },
       choices: [
-        { label: 'Why a hundred?', goto: 'why' },
-        { label: 'Thanks', goto: '' }
+        { label: t('shellman.whyHundred'), goto: 'why' },
+        { label: t('shellman.thanks'), goto: '' }
       ]
     }
   }

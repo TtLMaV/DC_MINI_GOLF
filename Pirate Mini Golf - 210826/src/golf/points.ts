@@ -12,7 +12,7 @@ import { identityReady, myDisplayName, myUserId } from './net'
 import { setStandings } from './standings'
 import { setShellsCarried } from './shells'
 import { setScrapCarried } from './detector'
-import { applySavedSettings, onSettingChanged } from './settings'
+import { applySavedSettings, onSettingChanged, onSettingTextChanged } from './settings'
 
 /**
  * Pixel Points: the client's view of the ledger.
@@ -298,6 +298,10 @@ export function setupPoints(
   // no confirmation: the server takes it, saves it with the rest of the
   // wallet, and the switch on screen has already moved because the panel reads
   // its own state rather than waiting for a round trip.
+  onSettingTextChanged((key, value) => {
+    void room.send('settingText', { key, value })
+  })
+
   onSettingChanged((key, on) => {
     void room.send('settings', { key, on })
   })

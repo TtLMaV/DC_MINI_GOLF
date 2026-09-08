@@ -24,6 +24,7 @@ import { report as reportQuest } from './quests'
 import { closeShop, shopOpen } from './shop'
 import { play, setCharging } from './sfx'
 import { createSwing, deviationDegrees, resetSwing, strikeLabel, Swing, updateSwing } from './swing'
+import { t, tName } from './strings'
 
 /**
  * The rules layer: which hole you are on, how many shots it has taken, when the
@@ -227,8 +228,8 @@ export class Game {
   start(): void {
     this.beginPractice(false)
     this.toast(
-      'Pirate Mini Golf',
-      'Have a putt on the practice green. Join a round at the board when you are ready.',
+      t('toast.welcome.title'),
+      t('toast.welcome.detail'),
       'neutral',
       8
     )
@@ -271,7 +272,7 @@ export class Game {
     const cup = cupCentre(hole)
     this.aimYaw = Math.atan2(cup.x - hole.tee.x, cup.z - hole.tee.z)
 
-    if (announce) this.toast(hole.name, hole.hint, 'neutral', 4)
+    if (announce) this.toast(tName('hole', hole.name), tName('holeHint', hole.name), 'neutral', 4)
   }
 
   /**
@@ -309,8 +310,8 @@ export class Game {
       if (!this.secretRefused) {
         this.secretRefused = true
         this.toast(
-          'The tenth is shut',
-          `Level ${FREE.secretLevel} opens it. Salt knows more than he lets on.`,
+          t('toast.tenthShut.title'),
+          t('toast.tenthShut.detail', { n: FREE.secretLevel }),
           'bad',
           4
         )
@@ -347,10 +348,13 @@ export class Game {
 
     const others = roster().length - 1
     this.toast(
-      `Hole 1 — ${HOLES[0].name}`,
+      t('toast.holeTitle', { n: 1, name: tName('hole', HOLES[0].name) }),
       others > 0
-        ? `Par ${HOLES[0].par}. Playing with ${others} other${others === 1 ? '' : 's'}.`
-        : `Par ${HOLES[0].par}. ${HOLES[0].hint}`,
+        ? t(others === 1 ? 'toast.holeWithOne' : 'toast.holeWithOthers', {
+            par: HOLES[0].par,
+            n: others
+          })
+        : t('toast.holeDetail', { par: HOLES[0].par, hint: tName('holeHint', HOLES[0].name) }),
       'neutral',
       5
     )
@@ -393,8 +397,8 @@ export class Game {
     this.beginPractice(false)
     this.movePlayerToTee(PRACTICE)
     this.toast(
-      'Round left',
-      'Card torn up and nothing scored. The board by the first tee signs you back on.',
+      t('toast.roundLeft.title'),
+      t('toast.roundLeft.detail'),
       'neutral',
       4
     )
@@ -427,7 +431,10 @@ export class Game {
     this.aimYaw = Math.atan2(cup.x - hole.tee.x, cup.z - hole.tee.z)
 
     if (announce) {
-      this.toast(`Hole ${hole.number} — ${hole.name}`, `Par ${hole.par}. ${hole.hint}`, 'neutral', 5)
+      this.toast(
+        t('toast.holeTitle', { n: hole.number, name: tName('hole', hole.name) }),
+        t('toast.holeDetail', { par: hole.par, hint: tName('holeHint', hole.name) }),
+        'neutral', 5)
     }
   }
 
@@ -505,7 +512,10 @@ export class Game {
     this.beginHole(index, false)
     this.movePlayerToTee(HOLES[index])
     const hole = HOLES[index]
-    this.toast(`Hole ${hole.number} — ${hole.name}`, `Par ${hole.par}. ${hole.hint}`, 'neutral', 4)
+    this.toast(
+        t('toast.holeTitle', { n: hole.number, name: tName('hole', hole.name) }),
+        t('toast.holeDetail', { par: hole.par, hint: tName('holeHint', hole.name) }),
+        'neutral', 4)
   }
 
   /**
@@ -533,7 +543,7 @@ export class Game {
     const hole = which === 'secret' ? SECRET : PRACTICE
     this.beginFree(which, false)
     this.movePlayerToTee(hole)
-    this.toast(hole.name, hole.hint, 'neutral', 4)
+    this.toast(tName('hole', hole.name), tName('holeHint', hole.name), 'neutral', 4)
   }
 
   /** Wipes the card without leaving the hole you are on. */
@@ -543,7 +553,7 @@ export class Game {
     this.state.strokes = 0
     const row = myRow()
     if (row) row.card = this.state.card.slice()
-    this.toast('Card cleared', 'Every hole back to unplayed.', 'neutral', 2)
+    this.toast(t('toast.cardCleared.title'), t('toast.cardCleared.detail'), 'neutral', 2)
   }
 
   closeAdmin(): void {
@@ -628,7 +638,12 @@ export class Game {
     if (hasDetector() && inputSystem.isTriggered(InputAction.IA_ACTION_5, PointerEventType.PET_DOWN)) {
       const out = toggleDetector()
       if (out) this.clubOut = false
-      this.toast(out ? 'Detector out' : 'Detector away', out ? 'Sweep slowly.' : '', 'neutral', 1.4)
+      this.toast(
+        t(out ? 'toast.detectorOut' : 'toast.detectorAway'),
+        out ? t('toast.sweepSlowly') : '',
+        'neutral',
+        1.4
+      )
       return
     }
 
@@ -636,7 +651,7 @@ export class Game {
     // course is not already deciding for you.
     if (inputSystem.isTriggered(InputAction.IA_ACTION_6, PointerEventType.PET_DOWN)) {
       this.clubOut = !this.clubOut
-      this.toast(this.clubOut ? 'Club out' : 'Club away', '', 'neutral', 1.2)
+      this.toast(t(this.clubOut ? 'toast.clubOut' : 'toast.clubAway'), '', 'neutral', 1.2)
       return
     }
 
@@ -645,7 +660,7 @@ export class Game {
     if (detectorIsOut() && overFind()) {
       if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)) {
         if (tryDig()) {
-          this.toast('Scrap', 'Something metal, and older than you.', 'good', 1.6)
+          this.toast(t('toast.scrap.title'), t('toast.scrap.detail'), 'good', 1.6)
           return
         }
       }
@@ -789,7 +804,7 @@ export class Game {
       setCharging(false)
       setLineVisible(this.aim, true)
       this.setPhase('address')
-      this.toast('Swing cancelled', 'No stroke counted. Line it up again.', 'neutral', 1.6)
+      this.toast(t('toast.cancelled.title'), t('toast.cancelled.detail'), 'neutral', 1.6)
       return true
     }
     if (phase === 'address') {
@@ -1063,8 +1078,8 @@ export class Game {
     this.state.strokes += RULES.hazardPenalty
     this.state.penalties += RULES.hazardPenalty
     this.toast(
-      'Lost ball',
-      `+${RULES.hazardPenalty} stroke. Playing again from where it last came to rest.`,
+      t('toast.lostBall.title'),
+      t('toast.lostBall.detail', { n: RULES.hazardPenalty }),
       'bad',
       3.2
     )
@@ -1081,7 +1096,12 @@ export class Game {
     // being told to pick up after ten goes at a warm-up putt would be absurd.
     const limit = this.hole.maxStrokes ?? (this.state.practising ? 0 : RULES.maxStrokes)
     if (limit > 0 && this.state.strokes >= limit) {
-      this.toast('Picked up', `Maximum ${limit} strokes on ${this.hole.name}.`, 'bad', 3.5)
+      this.toast(
+        t('toast.pickedUp.title'),
+        t('toast.pickedUp.detail', { n: limit, hole: tName('hole', this.hole.name) }),
+        'bad',
+        3.5
+      )
       // Free play has no card to write to, so being picked up is simply the
       // ball going back on the tee. Routing it through scoreHole would run the
       // holed-out branch and congratulate you for running out of shots.
@@ -1107,10 +1127,10 @@ export class Game {
     this.setPhase('walking')
     this.inputLock = 0.4
     this.toast(
-      'Ball reset',
+      t('toast.ballReset.title'),
       RULES.resetPenalty > 0
-        ? `Back to your last lie, +${RULES.resetPenalty} stroke.`
-        : 'Back to your last lie, no penalty.',
+        ? t('toast.ballReset.penalty', { n: RULES.resetPenalty })
+        : t('toast.ballReset.free'),
       'neutral',
       2.4
     )
@@ -1152,10 +1172,10 @@ export class Game {
       const n = this.state.practicePutts
       play('holed', this.sinkTo.x, this.sinkTo.y, this.sinkTo.z, 0.85)
       this.toast(
-        strokes === 1 ? 'In one' : secret ? 'You holed the secret' : 'Holed',
+        t(strokes === 1 ? 'toast.inOne' : secret ? 'toast.holedSecret' : 'toast.holed'),
         secret
-          ? `${strokes} shot${strokes === 1 ? '' : 's'}. Very few people see that.`
-          : `${strokes} shot${strokes === 1 ? '' : 's'}. That's ${n} down on the practice green.`,
+          ? t(strokes === 1 ? 'toast.secretOne' : 'toast.secretMany', { n: strokes })
+          : t(strokes === 1 ? 'toast.practiceOne' : 'toast.practiceMany', { n: strokes, total: n }),
         strokes === 1 || secret ? 'good' : 'neutral',
         secret ? 4 : 2.4
       )
@@ -1173,33 +1193,41 @@ export class Game {
     this.state.card[this.state.holeIndex] = strokes
     const diff = strokes - hole.par
 
-    let title = `+${diff}`
+    let title = t('score.over', { n: diff })
     let tone: Toast['tone'] = 'bad'
     if (strokes === 1) {
-      title = 'HOLE IN ONE!'
+      title = t('score.holeInOne')
       tone = 'good'
     } else if (diff <= -2) {
-      title = 'EAGLE'
+      title = t('score.eagle')
       tone = 'good'
     } else if (diff === -1) {
-      title = 'BIRDIE'
+      title = t('score.birdie')
       tone = 'good'
     } else if (diff === 0) {
-      title = 'PAR'
+      title = t('score.par')
       tone = 'good'
     } else if (diff === 1) {
-      title = 'BOGEY'
+      title = t('score.bogey')
       tone = 'neutral'
     } else if (diff === 2) {
-      title = 'DOUBLE BOGEY'
+      title = t('score.doubleBogey')
     }
 
     const overall = this.toPar
     const standing =
-      overall === 0 ? 'level par' : overall > 0 ? `${overall} over` : `${-overall} under`
+      overall === 0
+        ? t('par.level')
+        : overall > 0
+          ? t('par.over', { n: overall })
+          : t('par.under', { n: -overall })
     this.toast(
       title,
-      `${strokes} shot${strokes === 1 ? '' : 's'} on hole ${hole.number}. You're ${standing}.`,
+      t(strokes === 1 ? 'toast.holeResultOne' : 'toast.holeResultMany', {
+        n: strokes,
+        hole: hole.number,
+        standing
+      }),
       tone,
       RULES.advanceDelay
     )
@@ -1239,7 +1267,7 @@ export class Game {
       toPar: overall,
       card: this.state.card.slice()
     })
-    const label = overall === 0 ? 'level par' : overall > 0 ? `+${overall}` : `${overall}`
+    const label = overall === 0 ? t('par.level') : overall > 0 ? `+${overall}` : `${overall}`
 
     const field = roster().filter((p) => p.round === this.state.round)
     const beaten = field.filter((p) => {
@@ -1248,11 +1276,12 @@ export class Game {
       const played = p.card.filter((sc) => sc >= 0).length
       return played === HOLES.length && theirs > total
     }).length
-    const place = field.length > 1 ? `  Beat ${beaten} of ${field.length - 1}.` : ''
+    const place =
+      field.length > 1 ? t('toast.beat', { n: beaten, of: field.length - 1 }) : ''
 
     this.toast(
-      'Round complete',
-      `${total} shots for the nine, ${label} against a par of ${TOTAL_PAR}.${place} Going again.`,
+      t('toast.roundDone.title'),
+      t('toast.roundDone.detail', { total, label, par: TOTAL_PAR, place }),
       overall <= 0 ? 'good' : 'neutral',
       RULES.advanceDelay + 3
     )
@@ -1264,7 +1293,7 @@ export class Game {
     submitRound(this.state.card.slice())
     if (preview.total > 0) {
       this.toast(
-        'Card in',
+        t('toast.cardIn.title'),
         `${preview.lines.map((l) => l.label).join(', ')}.`,
         'good',
         4

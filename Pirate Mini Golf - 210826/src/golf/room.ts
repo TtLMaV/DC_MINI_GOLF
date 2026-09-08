@@ -285,7 +285,20 @@ export const MESSAGES = {
     taken: Schemas.Int,
     paid: Schemas.Int,
     need: Schemas.Int
-  })
+  }),
+
+  /**
+   * Client -> server: a setting whose value is a word, not yes or no.
+   *
+   * The language, so far. `settings` above carries a boolean and cannot be
+   * widened to carry both without changing a message that already exists,
+   * which is the one thing the note above mySettings says not to do. A second
+   * message costs nothing and an old server simply ignores it.
+   *
+   * It comes back in the same mySettings JSON as the switches, because on the
+   * server they live in the same map and that map is written whole.
+   */
+  settingText: Schemas.Map({ key: Schemas.String, value: Schemas.String })
 }
 
 export const room = registerMessages(MESSAGES)

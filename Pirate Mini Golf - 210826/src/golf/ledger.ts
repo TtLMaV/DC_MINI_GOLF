@@ -71,7 +71,15 @@ type Wallet = {
    * a bought club does. Nothing on the server reads them — they are the
    * client's business — but the server is the only thing that remembers.
    */
-  settings: Record<string, boolean>
+  /**
+   * The switches, and the language.
+   *
+   * Booleans and one string in the same map, because it is written as JSON and
+   * JSON does not mind. The client checks each value's type against the key it
+   * came back under, so a wallet holding something odd is ignored rather than
+   * obeyed.
+   */
+  settings: Record<string, boolean | string>
   /** Fewest strokes for the nine, for the personal best award. */
   best: number
   /** YYYY-MM-DD of the last completed round, for first-of-day. */
@@ -1035,6 +1043,28 @@ export function runLedger(): void {
     if (wallet.settings[key] === data.on) return
 
     wallet.settings[key] = data.on
+    touch(address)
+  })
+
+  /**
+   * The same, for a setting whose value is a word.
+   *
+   * The value is capped at a length no legitimate setting needs. Nothing here
+   * knows what a language code looks like and it should not: the client checks
+   * the code against the tables it actually ships when it reads the wallet
+   * back, which is the only place that check can be honest.
+   */
+  room.onMessage('settingText', async (data, context) => {
+    const address = context?.from
+    if (!address) return
+    const key = data.key
+    if (!key) return
+    const value = (data.value ?? '').slice(0, 16)
+
+    const wallet = await load(address)
+    if (wallet.settings[key] === value) return
+
+    wallet.settings[key] = value
     touch(address)
   })
 

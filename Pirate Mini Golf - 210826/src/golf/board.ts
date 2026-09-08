@@ -12,6 +12,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Color3, Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
 import { BOARD } from './config'
+import { t } from './strings'
 import { present, roster } from './net'
 import { onPhone } from './npc'
 
@@ -56,11 +57,11 @@ let where = Vector3.Zero()
  * no pictures, so the only way to make room inside a centred line is to make
  * the line longer and leave the extra empty.
  */
-const JOIN_WORDS = 'to join'
+const joinWords = () => t('sign.toJoin')
 
 function joinLine(): string {
-  if (!onPhone()) return 'Press E to join'
-  return ' '.repeat(BOARD.joinIcon.pad) + JOIN_WORDS
+  if (!onPhone()) return t('sign.toJoinKey')
+  return ' '.repeat(BOARD.joinIcon.pad) + joinWords()
 }
 
 /**
@@ -140,7 +141,7 @@ export function setupBoard(join: () => void): void {
     parent: panel
   })
   TextShape.create(title, {
-    text: 'PIRATE MINI GOLF',
+    text: t('sign.title'),
     fontSize: BOARD.titleSize,
     // width and height are the box the text is *aligned* in. They do not scale
     // the lettering down to fit — nothing in SDK7 does — so the size that
@@ -195,7 +196,7 @@ export function setupBoard(join: () => void): void {
   // whether it is seen.
   putter = engine.addEntity()
   const icon = BOARD.joinIcon
-  const chars = icon.pad + JOIN_WORDS.length
+  const chars = icon.pad + joinWords().length
   Transform.create(putter, {
     position: Vector3.create(
       BOARD.textX + (icon.pad / 2 - chars / 2) * icon.charWidth,
@@ -220,7 +221,7 @@ export function setupBoard(join: () => void): void {
   pointerEventsSystem.onPointerDown(
     {
       entity: hit,
-      opts: { button: InputAction.IA_PRIMARY, hoverText: 'Join the round', maxDistance: BOARD.reach }
+      opts: { button: InputAction.IA_PRIMARY, hoverText: t('sign.join'), maxDistance: BOARD.reach }
     },
     () => {
       if (joined) return
@@ -254,7 +255,7 @@ export function markLeft(): void {
   pointerEventsSystem.onPointerDown(
     {
       entity: hit,
-      opts: { button: InputAction.IA_PRIMARY, hoverText: 'Join the round', maxDistance: BOARD.reach }
+      opts: { button: InputAction.IA_PRIMARY, hoverText: t('sign.join'), maxDistance: BOARD.reach }
     },
     () => {
       if (joined) return
@@ -278,8 +279,8 @@ let refresh = 0
  */
 function countLine(playing: number, watching: number): string {
   const out: string[] = []
-  if (playing > 0) out.push(`${playing} playing`)
-  if (watching > 0) out.push(`${watching} nearby`)
+  if (playing > 0) out.push(t('sign.playing', { n: playing }))
+  if (watching > 0) out.push(t('sign.watching', { n: watching }))
   return out.join('   ·   ')
 }
 
@@ -294,7 +295,7 @@ export function updateBoard(dt: number): void {
 
   const promptText = TextShape.getMutableOrNull(prompt)
   if (promptText) {
-    promptText.text = joined ? 'You are in. Walk to the tee.' : joinLine()
+    promptText.text = joined ? t('sign.youAreIn') : joinLine()
   }
 
   const countText = TextShape.getMutableOrNull(count)

@@ -1,5 +1,7 @@
 import {
   engine,
+  Animator,
+  GltfContainer,
   InputAction,
   Transform,
   TransformType,
@@ -15,6 +17,7 @@ import { Color4, Vector3, Quaternion } from '@dcl/sdk/math'
 // IMPORTANT: absolute path import — the bare "cannon-es" specifier does NOT
 // resolve inside the SDK bundler. Also add this path to tsconfig "include".
 import { isServer } from '@dcl/sdk/network'
+import { isMobile } from '@dcl/sdk/platform'
 
 import * as CANNON from 'cannon-es'
 import { courseData } from './collisionData/course_collision'
@@ -141,8 +144,73 @@ let lastLogged: { x: number; y: number; z: number } | undefined
 
 let rampClock = 0
 let rampTime: number = 15
-let rampMoveAmount: Vector3 = Vector3.create(0, 1.45, 0)
 let rampStartPos: Vector3
+
+/** Hole 9's lift, all measured rather than chosen. */
+const RAMP_MODEL = 'assets/scene/Holes/Hole 9/Moving Ramp V2.glb'
+/** Centre of the shaft in the course mesh. */
+const RAMP_HOME_X = 22.15
+const RAMP_HOME_Z = 75.25
+/**
+ * Which way the wedge faces, and everything that follows from it.
+ *
+ * Hole 9 tees at x 4.7 and its cup is the chest volume at x 34.7, so the ball
+ * runs west to east and has to climb the shaft: floor 1.00 on the west side,
+ * 3.00 on the east.
+ *
+ * Off the collider mesh, unrotated, the deck sits at -0.1 over its local
+ * x -0.9 edge and +0.5 over its local x +0.9 edge. RAMP_YAW decides which of
+ * those two ends up facing west, and the travel is derived from that rather
+ * than typed in, so both joints stay flush whichever way it is turned.
+ *
+ *   180  deck high on the west side. The ball rolls on at the bottom, settles
+ *        against the east wall of the shaft, rides up and rolls out on to the
+ *        3.00 floor. Travel 0.50 to 3.10.
+ *     0  deck high on the east side. Travel 1.10 to 2.50, and the ball has to
+ *        climb the deck rather than settle on it.
+ *
+ * One number, applied to the entity and to the cannon body from the same line,
+ * so the model and the collision can never disagree about it.
+ */
+// Typed as number, not the literal 0, so flipping it to 180 still compiles.
+const RAMP_YAW: number = 0
+
+/**
+ * Deck height over each end of the mesh, in its own local space.
+ *
+ * ramp_collision.ts is mirrored in x to match what the engine actually draws,
+ * so after the mirror the deck sits +0.5 over local x -0.9 and -0.1 over +0.9.
+ */
+const DECK_OVER_LOCAL_WEST = 0.5
+const DECK_OVER_LOCAL_EAST = -0.1
+/** The course floors either side of the shaft, both measured off the mesh. */
+const FLOOR_WEST = 1.0
+const FLOOR_EAST = 3.0
+
+const rampTurned = RAMP_YAW === 180
+const rampWestLip = rampTurned ? DECK_OVER_LOCAL_EAST : DECK_OVER_LOCAL_WEST
+const rampEastLip = rampTurned ? DECK_OVER_LOCAL_WEST : DECK_OVER_LOCAL_EAST
+
+/**
+ * The two ends of the travel. Set here, not worked out from the floors.
+ *
+ * I did briefly derive these from RAMP_YAW, on the reasoning that the west lip
+ * should finish level with the 1.00 floor and the east lip level with the 3.00
+ * one. At yaw 0 that gives 1.10 to 2.50, which is a 1.40m travel, and it made
+ * the ramp barely move. These are the numbers that were actually running, so
+ * they are back under hand control where you can see them.
+ *
+ * The [ramp] console line prints where each lip lands against each floor every
+ * second, so you can nudge these two and read the seam straight off it.
+ */
+const RAMP_BOTTOM_Y = 0.4
+const RAMP_TOP_Y = 3.1
+/** Seconds parked at the bottom before it sets off again. */
+const RAMP_BOTTOM_HOLD = 0.25
+
+/** Draws the collider as a translucent red box over the model. */
+const RAMP_SHOW_COLLIDER = false
+let rampGhost: Entity | undefined
 
 /** Build static bodies from every entity named col_* and grab the ball. */
 function buildWorldFromScene() {
@@ -248,8 +316,18 @@ function buildWorldFromScene() {
     shape: new CANNON.Trimesh(rampData.vertices, rampData.indices),
     collisionFilterGroup: GROUP_COURSE
   })
-  rampBody.position.set(19.25, 1.3, 49.25)
-  rampStartPos = rampBody.position
+  // Moving Ramp V2 is zeroed: both its nodes sit on the .glb origin, so the
+  // entity and the body share one transform and there are no offsets to carry.
+  // The shaft was measured off course_collision: a 1.80 x 2.40 hole centred on
+  // (22.15, 75.25), floor 1.00 to the west of it and 3.00 to the east. The
+  // wedge is 1.80 x 2.40, so it fills it exactly.
+  //
+  // A copy, not a reference: this used to alias rampBody.position, which meant
+  // anything writing into that vector in place would walk the ramp's home.
+  rampStartPos = Vector3.create(RAMP_HOME_X, RAMP_BOTTOM_Y, RAMP_HOME_Z)
+  rampBody.position.set(rampStartPos.x, rampStartPos.y, rampStartPos.z)
+  // The same turn the entity gets, from the same number.
+  rampBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), (RAMP_YAW * Math.PI) / 180)
   world.addBody(rampBody)
 
   //--------
@@ -538,28 +616,169 @@ function makePhysicsBridge(body: CANNON.Body): Physics {
 }
 
 // ---------------------------------------------------------------------------
+// Water speed on phones
+// ---------------------------------------------------------------------------
+
+/**
+ * The ocean and the waterfalls run their own baked clips. On a phone they play
+ * far too fast, so their speed is scaled right down there and left alone on
+ * desktop.
+ *
+ * Matched on the entity name rather than a fixed list, so renaming the ocean or
+ * dropping in another waterfall does not quietly leave one running at full pelt.
+ *
+ * The authored speed of each clip is kept the first time it is read, and the
+ * target is always authored x WATER_PHONE_SPEED. That matters: scaling the
+ * CURRENT speed would compound every time this ran and the water would grind
+ * to a halt.
+ *
+ * It re-checks once a second rather than firing once at startup, because a
+ * phone resolves these models late and this is the same late-load behaviour
+ * that had the ramp playing its baked clips. It writes nothing when the speeds
+ * are already right, so after the first pass it costs three name lookups a
+ * second and nothing else.
+ */
+const WATER_PHONE_SPEED = 0.05
+/** Any animated entity whose name mentions one of these counts as water. */
+const WATER_WORDS = ['ocean', 'waterfall', 'water', 'sea']
+const waterAuthored = new Map<Entity, number[]>()
+let waterClock = 0
+let waterPhone: boolean | undefined
+
+function looksLikeWater(name: string): boolean {
+  const n = name.toLowerCase()
+  for (const word of WATER_WORDS) if (n.indexOf(word) !== -1) return true
+  return false
+}
+
+function slowTheWaterOnPhones(dt: number): void {
+  if (waterPhone === undefined) waterPhone = isMobile()
+  if (!waterPhone) return
+
+  waterClock += dt
+  if (waterClock < 1) return
+  waterClock = 0
+
+  for (const [entity, name] of engine.getEntitiesWith(Name, Animator)) {
+    if (!looksLikeWater(name.value)) continue
+
+    const anim = Animator.get(entity)
+    let authored = waterAuthored.get(entity)
+    if (authored === undefined) {
+      // A clip with no speed set runs at 1.
+      authored = anim.states.map((state) => (state.speed === undefined || state.speed === 0 ? 1 : state.speed))
+      waterAuthored.set(entity, authored)
+    }
+
+    let wrong = false
+    for (let i = 0; i < anim.states.length && i < authored.length; i++) {
+      if (anim.states[i].speed !== authored[i] * WATER_PHONE_SPEED) wrong = true
+    }
+    if (!wrong) continue
+
+    // Only now, so an untouched component is never marked dirty.
+    const mut = Animator.getMutable(entity)
+    for (let i = 0; i < mut.states.length && i < authored.length; i++) {
+      mut.states[i].speed = authored[i] * WATER_PHONE_SPEED
+    }
+    console.log(
+      `[golf] ${name.value}: ${mut.states.length} clip(s) set to ${WATER_PHONE_SPEED * 100}% speed for a phone`
+    )
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Moving Physics Objects
 // ---------------------------------------------------------------------------
 function UpdateObstacles(dt: number) {
 
-  // Fixing This Bullshit the way that shouldn't crap its pants on mobile
-  rampClock += dt
-  rampClock = rampClock % rampTime
-  let rampPhase = Math.sin(2 * Math.PI * rampClock / rampTime)
+  // The two authored heights the ramp travels between, as world y for the
+  // Moving Ramp.glb entity. It is authored as a child of Hole 9 Base.glb,
+  // which sits at (19.25, 0, 49.25), so its local y and its world y are the
+  // same number and these read straight off the editor.
+  //
+  // For reference when tuning these: the collision wedge puts its entry lip
+  // (the low ledge side, x 21.25) at y + 1.0, and its outfall lip (the high
+  // ledge side, x 23.05) at y + 0.4. The course floors either side of the
+  // shaft are at 1.00 and 3.00. So 0.00 docks the bottom exactly flush, and
+  // 2.60 docks the top exactly flush.
+  rampClock = (rampClock + Math.min(dt, 0.1)) % rampTime
+
+  // Parked at the bottom, then up and back down over what is left of the cycle.
+  // A cosine rather than a sine so the travel starts and finishes at the bottom
+  // with no speed on it, which is what lets the hold join without a jolt.
+  let rampLevel = 0
+  let rampSlope = 0
+  if (rampClock >= RAMP_BOTTOM_HOLD) {
+    const span = rampTime - RAMP_BOTTOM_HOLD
+    const u = (rampClock - RAMP_BOTTOM_HOLD) / span
+    rampLevel = (1 - Math.cos(2 * Math.PI * u)) / 2
+    rampSlope = (Math.PI * Math.sin(2 * Math.PI * u)) / span
+  }
+  const rampY = RAMP_BOTTOM_Y + (RAMP_TOP_Y - RAMP_BOTTOM_Y) * rampLevel
+  // How fast it is moving right now. Exactly zero through the hold.
+  const rampRise = (RAMP_TOP_Y - RAMP_BOTTOM_Y) * rampSlope
 
   const rampFound = engine.getEntityOrNullByName('Moving Ramp.glb')
-    if (rampFound !== null && Transform.has(rampFound)) {
+
+  // The old .glb shipped baked clips, CubeAction and CubeAction.001, and the
+  // scene is authored with an Animator holding them. A clip is evaluated by
+  // the renderer, which the scene cannot read back, so the cannon body never
+  // learned about it and the renderer only started it once the model had
+  // loaded: quick on a desktop, late on a phone. That is where the ramp's
+  // three different movements came from. V2 has no clips in it at all, and
+  // this clears the leftover component off the authored entity.
+  if (rampFound !== null && Animator.has(rampFound)) {
+    Animator.deleteFrom(rampFound)
+    console.log('[golf] cleared the leftover Animator off the ramp')
+  }
+
+  if (rampFound !== null && Transform.has(rampFound)) {
     // Get the mutable transform typed as TransformType
     const rampMut: TransformType = Transform.getMutable(rampFound)
     rampMut.parent = undefined
-    rampMut.position = Vector3.add(rampStartPos, (Vector3.scale(rampMoveAmount, rampPhase)))
-    // boat Update Physics
-    if(rampBody)
-    {
-      let p = rampMut.position
-      rampBody.position = new CANNON.Vec3(p.x + 2.9, p.y + 0.5, p.z + 26)
-      //debugShowPhysBB(rampBody)
+    rampMut.position = Vector3.create(rampStartPos.x, rampY, rampStartPos.z)
+  }
+
+  // The body is driven from the same figure rather than read back off the
+  // transform, so it keeps moving on a frame where the .glb has not resolved.
+  if (rampBody) {
+    rampBody.position = new CANNON.Vec3(rampStartPos.x, rampY, rampStartPos.z)
+    // The body is only repositioned once a frame, but the ball is simulated in
+    // fixed 1/120 substeps. Without a velocity the deck is frozen between those
+    // repositions and then jumps into the ball: 10mm a frame at 60fps but 40mm
+    // at 15. A kinematic body carries its velocity into the solver and is
+    // integrated on every substep, so the deck moves smoothly underneath the
+    // ball whatever the frame rate.
+    rampBody.velocity = new CANNON.Vec3(0, rampRise, 0)
+    rampBody.wakeUp()
+  }
+
+  if (rampGhost !== undefined) {
+    // Centre of the collider, not its origin: it runs -0.5 to 0.7 in y.
+    Transform.getMutable(rampGhost).position = Vector3.create(
+      rampStartPos.x,
+      rampY + 0.1,
+      rampStartPos.z
+    )
+  }
+
+  // Once a second, what the ramp and the ball are doing. Same switch as the
+  // position readout.
+  if (ADMIN.logPosition && Math.floor(rampClock) !== Math.floor(rampClock - Math.min(dt, 0.1))) {
+    let ballBit = ''
+    if (ballBody) {
+      const b = ballBody.position
+      const across = Math.max(0, Math.min(1, (b.x - (rampStartPos.x - 0.9)) / 1.8))
+      const under = rampY + rampWestLip + (rampEastLip - rampWestLip) * across
+      const onDeck = Math.abs(b.x - rampStartPos.x) < 0.95 && Math.abs(b.z - rampStartPos.z) < 1.25
+      ballBit = `  ball y ${b.y.toFixed(2)} ${onDeck ? 'gap ' + (b.y - 0.1 - under).toFixed(3) : 'off deck'}`
     }
+    console.log(
+      `[ramp] ${(1 / Math.max(dt, 1e-4)).toFixed(0)}fps  y ${rampY.toFixed(2)}  rise ${rampRise.toFixed(2)}m/s  ` +
+      `yaw ${RAMP_YAW}  west lip ${(rampY + rampWestLip).toFixed(2)} (floor ${FLOOR_WEST.toFixed(2)})  ` +
+      `east lip ${(rampY + rampEastLip).toFixed(2)} (floor ${FLOOR_EAST.toFixed(2)})${ballBit}`
+    )
   }
 
   // Boat Movement Back and forth
@@ -676,6 +895,42 @@ export function main() {
   setupWater()
   setupRamp()
 
+  // Swap hole 9's ramp over to the zeroed V2 model, and turn it to face play
+  // space. The mesh comes out of Blender with the slope running the other way,
+  // and 180 degrees about Y is a true rotation for it because the wedge is
+  // symmetric in z. collisionData/ramp_collision.ts is baked already turned, so
+  // the body stays unrotated and the two agree.
+  const rampNode = engine.getEntityOrNullByName('Moving Ramp.glb')
+  if (rampNode === null) {
+    console.log('[golf] no entity named "Moving Ramp.glb" — hole 9 has no lift')
+  } else {
+    if (Animator.has(rampNode)) Animator.deleteFrom(rampNode)
+    GltfContainer.createOrReplace(rampNode, { src: RAMP_MODEL })
+    const t = Transform.getMutable(rampNode)
+    t.parent = undefined
+    t.rotation = Quaternion.fromAngleAxis(RAMP_YAW, Vector3.Up())
+    t.scale = Vector3.create(1, 1, 1)
+    t.position = Vector3.create(rampStartPos.x, RAMP_BOTTOM_Y, rampStartPos.z)
+  }
+
+  // A see-through box the exact size of the collision wedge, sat where the
+  // cannon body is. If it does not wrap the model, the number under it is the
+  // offset, and you can read it straight off the two.
+  if (RAMP_SHOW_COLLIDER) {
+    rampGhost = engine.addEntity()
+    MeshRenderer.setBox(rampGhost)
+    Transform.create(rampGhost, {
+      position: Vector3.create(rampStartPos.x, RAMP_BOTTOM_Y + 0.1, rampStartPos.z),
+      rotation: Quaternion.fromAngleAxis(RAMP_YAW, Vector3.Up()),
+      // The collider spans 1.8 in x, -0.5..0.7 in y, 2.4 in z.
+      scale: Vector3.create(1.8, 1.2, 2.4)
+    })
+    Material.setPbrMaterial(rampGhost, {
+      albedoColor: Color4.create(1, 0, 0, 0.28),
+      transparencyMode: 2
+    })
+  }
+
   // The detector button appears the moment Sally hands one over and not
   // before, so the strip is watched rather than set once. One boolean compare
   // a frame, and the component is only rewritten when the answer changes.
@@ -687,8 +942,11 @@ export function main() {
     detectorShown = has
     applyTouchControls(has)
   })
+  engine.addSystem(slowTheWaterOnPhones)
   engine.addSystem(UpdateObstacles)
   engine.addSystem(physicsSystem)
+  // Console readout of where you are stood. Toggled by ADMIN.logPosition.
+  engine.addSystem(logWhereYouAre)
 
   if (!ballBody) {
     console.log('[golf] no entity named "ball" in the scene — the game cannot start')

@@ -68,4 +68,5 @@ export enum EntityNames {
   Wheel_glb = "Wheel.glb",
   ball = "ball",
   boat_glb = "boat.glb",
+  logo_glb = "logo.glb",
 } 

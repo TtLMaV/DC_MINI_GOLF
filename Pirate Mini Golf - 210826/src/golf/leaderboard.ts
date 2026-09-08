@@ -12,6 +12,7 @@ import { Color3, Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
 
 import { LEADER_BOARD } from './config'
 import { standingsHeard, standingsPage } from './standings'
+import { t, tOr } from './strings'
 
 /**
  * The leaderboard sign.
@@ -321,8 +322,12 @@ export function updateLeaderBoard(dt: number): void {
   const current = LEADER_BOARD.pages[page]
   if (!current) return
 
-  TextShape.getMutable(heading).text = current.heading
-  TextShape.getMutable(note).text = fit(current.note, LEADER_BOARD.noteSize, LEADER_BOARD.width)
+  TextShape.getMutable(heading).text = tOr(`board.${current.key}Heading`, current.heading)
+  TextShape.getMutable(note).text = fit(
+    tOr(`board.${current.key}Note`, current.note),
+    LEADER_BOARD.noteSize,
+    LEADER_BOARD.width
+  )
 
   const rows = standingsPage(current.key).slice(0, LEADER_BOARD.maxRows)
   const none = rows.length === 0
@@ -332,9 +337,9 @@ export function updateLeaderBoard(dt: number): void {
   // which, because "nobody has done this yet" and "the server has not answered"
   // look identical on a blank sign and only one of them is a fault.
   TextShape.getMutable(empty).text = !standingsHeard()
-    ? 'Waiting for the ledger…'
+    ? t('board.waiting')
     : none
-      ? 'Nobody yet. Be the first.'
+      ? t('board.nobody')
       : ''
 
   for (let i = 0; i < lines.length; i++) {

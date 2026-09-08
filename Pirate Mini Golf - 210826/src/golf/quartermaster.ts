@@ -3,6 +3,7 @@ import { addQuests, questChoices } from './quests'
 import { Game } from './game'
 import { roster } from './net'
 import { HOLES, TOTAL_PAR } from './course'
+import { t } from './strings'
 
 /**
  * What the Quartermaster says.
@@ -20,24 +21,28 @@ export function quartermasterDialog(game: Game): Dialog {
     const s = game.state
     if (s.practising) {
       return s.practicePutts > 0
-        ? `You've managed to hole ${s.practicePutts} on the practice green.`
-        : `You've not signed on yet.`
+        ? t('qm.stats.practiceSome', { n: s.practicePutts })
+        : t('qm.stats.notSignedOn')
     }
 
     const holes = s.card.filter((n) => n >= 0).length
-    if (holes === 0) return `You're on hole ${s.holeIndex + 1} and yet to hole one out.`
+    if (holes === 0) return t('qm.stats.noHoles', { n: s.holeIndex + 1 })
 
     const total = s.card.reduce((n, sc) => (sc >= 0 ? n + sc : n), 0)
     const par =
-      game.toPar === 0 ? 'level par' : game.toPar > 0 ? `${game.toPar} over` : `${-game.toPar} under`
-    return `${holes} hole${holes === 1 ? '' : 's'} down, ${total} shots, ${par}.`
+      game.toPar === 0
+        ? t('qm.par.level')
+        : game.toPar > 0
+          ? t('qm.par.over', { n: game.toPar })
+          : t('qm.par.under', { n: -game.toPar })
+    return t(holes === 1 ? 'qm.stats.oneHole' : 'qm.stats.holes', { holes, total, par })
   }
 
   const field = () => {
     const n = roster().length
-    if (n === 0) return 'Nobody signed up at the moment. The course is yours.'
-    if (n === 1) return game.state.joined ? 'Just you out there so far.' : 'One player out on the course.'
-    return `${n} out on the course right now.`
+    if (n === 0) return t('qm.field.none')
+    if (n === 1) return game.state.joined ? t('qm.field.justYou') : t('qm.field.onePlayer')
+    return t('qm.field.many', { n })
   }
 
   const dialog: Dialog = {
@@ -45,12 +50,12 @@ export function quartermasterDialog(game: Game): Dialog {
       // A function, not a template string: the dialog object is built once when
       // he is created, so a plain string would have him reporting whatever was
       // true the moment the scene loaded for the rest of the session.
-      text: () => `Welcome to the Shack. ${stats()} ${field()}`,
+      text: () => t('qm.greet', { stats: stats(), field: field() }),
       choices: () => [
         ...questChoices('quartermaster'),
-        { label: 'How do I play?', goto: 'howto' },
-        { label: "What's the course like?", goto: 'course' },
-        { label: 'Nothing for now', goto: '' }
+        { label: t('qm.howDoIPlay'), goto: 'howto' },
+        { label: t('qm.whatsCourse'), goto: 'course' },
+        { label: t('qm.nothingForNow'), goto: '' }
       ]
     },
 
@@ -58,45 +63,35 @@ export function quartermasterDialog(game: Game): Dialog {
       // Same lesson twice, once per set of controls. He is the tutorial, so
       // this is the one place where naming the wrong button costs a player the
       // whole game rather than a moment's confusion.
-      text: onPhone()
-        ? 'Walk to your ball and tap the putter button. Aim where you want the ball to go and confirm. ' +
-          'Once the power meter has started, confirm your desired strength by tapping again. Attempt to hit the white line within the green zone. Miss and the ball will veer left or right.'
-        : 'Walk to your ball and press E. Aim where you want the ball to go and confirm. ' +
-          'Once the power meter has started, confirm your desired strength by tapping again. Attempt to hit the white line within the green zone. Miss and the ball will veer left or right.',
+      text: () => t(onPhone() ? 'qm.howtoPhone' : 'qm.howtoKey'),
       choices: [
-        { label: 'What if I make a mess up my shot?', goto: 'cancel' },
-        { label: 'Where do I start?', goto: 'where' },
-        { label: 'Got it', goto: '' }
+        { label: t('qm.messUp'), goto: 'cancel' },
+        { label: t('qm.whereStart'), goto: 'where' },
+        { label: t('qm.gotIt'), goto: '' }
       ]
     },
 
     cancel: {
-      text: onPhone()
-        ? 'The X button cancels your swing, stepping you away from the ball altogether. ' +
-          'Nothing is on your card until the ball is struck. To reset your ball, head to your backpack.'
-        : 'F cancels your swing, stepping you away from the ball altogether. ' +
-          'Nothing is on your card until the ball is struck. To reset your ball, head to your backpack.',
+      text: () => t(onPhone() ? 'qm.cancelPhone' : 'qm.cancelKey'),
       choices: [
-        { label: 'Where do I start?', goto: 'where' },
-        { label: 'Thanks', goto: '' }
+        { label: t('qm.whereStart'), goto: 'where' },
+        { label: t('qm.thanks'), goto: '' }
       ]
     },
 
     where: {
-      text:
-        'The practice green is right here, in the shack.' +
-        'When you fancy playing properly, sign on at the board by the first tee and play the nine.',
+      text: () => t('qm.where'),
       choices: [
-        { label: "What's the course like?", goto: 'course' },
-        { label: 'Right you are', goto: '' }
+        { label: t('qm.whatsCourse'), goto: 'course' },
+        { label: t('qm.rightYouAre'), goto: '' }
       ]
     },
 
     course: {
-      text: `${HOLES.length} holes, par ${TOTAL_PAR}. Ramps, a barrel that will not sit still, a lift on the last that waits for nobody, and a lighthouse that has ruined better players than you.`,
+      text: () => t('qm.course', { holes: HOLES.length, par: TOTAL_PAR }),
       choices: [
-        { label: 'How do I play?', goto: 'howto' },
-        { label: 'I will take my chances', goto: '' }
+        { label: t('qm.howDoIPlay'), goto: 'howto' },
+        { label: t('qm.takeChances'), goto: '' }
       ]
     }
   }

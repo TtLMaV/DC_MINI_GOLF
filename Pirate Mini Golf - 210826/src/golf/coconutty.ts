@@ -1,4 +1,4 @@
-import { COCONUTS, DRINK } from './config'
+import { COCONUTS, DRINK, POINTS } from './config'
 import { coconutsCarried } from './coconuts'
 import { buyDrink, drinkLeft, drinkPending } from './drink'
 import { Dialog } from './npc'
@@ -13,6 +13,7 @@ import {
   jugStillWants
 } from './points'
 import { addQuests, questChoices, questIsRunning, questRemaining, report } from './quests'
+import { t } from './strings'
 
 /**
  * What Coconutty says.
@@ -39,29 +40,17 @@ export function coconuttyDialog(): Dialog {
 
   const greeting = () => {
     if (drinkLeft() > 0) {
-      return (
-        `You have got one in you already — ${Math.ceil(drinkLeft() / 60)} minute${
-          Math.ceil(drinkLeft() / 60) === 1 ? '' : 's'
-        } of it left, near enough. ` + 'Go and enjoy it. Standing still is a waste of a colada.'
-      )
+      const mins = Math.ceil(drinkLeft() / 60)
+      return t(mins === 1 ? 'coco.greet.drinkOne' : 'coco.greet.drinkMany', { n: mins })
     }
     const n = held()
     if (n === 0) {
-      return (
-        "Where's my sweet sweet coconuts man, you dont seem to have any on you? There are loads of palm trees on this island and every one of them is dropping them faster " +
-        'than I can pick them up, which is the only labour shortage I have ever been glad about.'
-      )
+      return t('coco.greet.none')
     }
     if (roomLeft() === 0) {
-      return (
-        `${n} on you and nowhere to put them. I have had my ${COCONUTS.dailyLimit} today. ` +
-        'Any more and they go off before I get to them, and a coconut that has gone off is a smell you remember.'
-      )
+      return t('coco.greet.full', { n, limit: COCONUTS.dailyLimit })
     }
-    return (
-      `${n} coconut${n === 1 ? '' : 's'}. I can take ${roomLeft()} more today. ` +
-      'Off the ground, I hope. I meant that about the trees.'
-    )
+    return t(n === 1 ? 'coco.greet.one' : 'coco.greet.many', { n, room: roomLeft() })
   }
 
   /**
@@ -95,7 +84,7 @@ export function coconuttyDialog(): Dialog {
         if (held() > 0 && roomLeft() > 0) {
           const taking = Math.min(held(), roomLeft())
           options.push({
-            label: `Hand over ${taking}`,
+            label: t('coco.handOver', { n: taking }),
             goto: 'handed',
             act: () => handCoconuts()
           })
@@ -106,7 +95,7 @@ export function coconuttyDialog(): Dialog {
         // tomorrow and the quest is sat there either way.
         if (forJug() > 0) {
           options.push({
-            label: `${forJug()} for the jug`,
+            label: t('coco.forJug', { n: forJug() }),
             goto: 'jug',
             act: () => handJugCoconuts()
           })
@@ -117,16 +106,16 @@ export function coconuttyDialog(): Dialog {
         // before rather than an object in a bag.
         if (blenderIsBuilt()) {
           options.push({
-            label: `Pina colada (${DRINK.price} PP)`,
+            label: t('coco.colada', { price: DRINK.price, pp: POINTS.short }),
             goto: 'poured',
             act: () => buyDrink()
           })
         }
 
         options.push(...questChoices('coconutty'))
-        options.push({ label: 'Why coconuts?', goto: 'why' })
-        options.push({ label: 'How many have I brought you?', goto: 'tally' })
-        options.push({ label: 'Cya later!', goto: '' })
+        options.push({ label: t('coco.whyCoconuts'), goto: 'why' })
+        options.push({ label: t('coco.howMany'), goto: 'tally' })
+        options.push({ label: t('coco.cyaLater'), goto: '' })
         return options
       }
     },
@@ -144,16 +133,12 @@ export function coconuttyDialog(): Dialog {
        */
       text: () => {
         const left = jugStillWants()
-        if (left < 0) return 'He starts sorting through them, and does not look up.'
-        return left > 0
-          ? 'He turns each one over, taps it, and sets it down in a separate pile. ' +
-            `"${left} more and I have got a jug."`
-          : 'He picks through them, holds one up, and stops talking for a moment. ' +
-            '"That is the one. That is a jug."'
+        if (left < 0) return t('coco.jug.waiting')
+        return left > 0 ? t('coco.jug.more', { n: left }) : t('coco.jug.done')
       },
       choices: [
-        { label: 'Why a coconut?', goto: 'building' },
-        { label: 'Right', goto: '' }
+        { label: t('coco.whyACoconut'), goto: 'building' },
+        { label: t('coco.right'), goto: '' }
       ]
     },
 
@@ -168,14 +153,10 @@ export function coconuttyDialog(): Dialog {
        * like a working one.
        */
       text: () =>
-        coconuttyHasAnswered()
-          ? 'He takes them two at a time, knocks each one against the next, and listens. ' +
-            '"That one is full," he says. Not specifing which.'
-          : 'He puts his hands out and leaves them out. Nothing changes hands. ' +
-            '(The server has not answered — check the console for "[golf] LEDGER SILENT".)',
+        coconuttyHasAnswered() ? t('coco.handed') : t('coco.handedSilent'),
       choices: [
-        { label: 'What do you do with them?', goto: 'why' },
-        { label: 'Right', goto: '' }
+        { label: t('coco.whatDoYouDo'), goto: 'why' },
+        { label: t('coco.right'), goto: '' }
       ]
     },
 
@@ -189,81 +170,59 @@ export function coconuttyDialog(): Dialog {
        * happened rather than what was asked for.
        */
       text: () => {
-        if (drinkLeft() > 0) {
-          return (
-            'He makes the drink it in the coconut, and hands it over without a straw. ' +
-            '"No straws," he says. "Straws are the one thing the sea never gives back."'
-          )
-        }
+        if (drinkLeft() > 0) return t('coco.poured.made')
         // Still waiting on the server. Said out loud rather than left blank,
         // because the alternative is a frame of "that did not work" every time
         // one does.
-        if (drinkPending()) return 'He turns on the blender. The motor takes a moment to run.'
-        if (balance() < DRINK.price) {
-          return `He looks at you, then at the blender, then at you. "${DRINK.price}," he says. "I did say."`
-        }
-        return 'He reaches for the jug and stops. (Nothing came back from the server — check the console.)'
+        if (drinkPending()) return t('coco.poured.pending')
+        if (balance() < DRINK.price) return t('coco.poured.tooPoor', { price: DRINK.price })
+        return t('coco.poured.silent')
       },
       choices: [
-        { label: 'What is in it?', goto: 'recipe' },
-        { label: 'Thanks', goto: '' }
+        { label: t('coco.whatIsInIt'), goto: 'recipe' },
+        { label: t('coco.thanks'), goto: '' }
       ]
     },
 
     recipe: {
-      text:
-        'Coconut, obviously. Pineapple, which I am not going to tell you where I get. ' +
-        'Ice, which is the part that should worry you, and rum, which is the part that does not worry me at all. ' +
-        'You will find you get about the place quicker afterwards. Have fun.',
+      text: () => t('coco.recipe'),
       choices: [
-        { label: 'That is not how any of that works', goto: 'works' },
-        { label: 'Fair enough', goto: '' }
+        { label: t('coco.notHowItWorks'), goto: 'works' },
+        { label: t('coco.fairEnough'), goto: '' }
       ]
     },
 
     works: {
-      text:
-        'No. It is not. And yet.\n\n' +
-        'Look, I have been on this island eleven months, there is a woman in a cave who talks to metal, ' +
-        'and a man on the south beach who has named some of the shells. The drink is the least of it.',
-      choices: [{ label: 'Good point', goto: '' }]
+      text: () => t('coco.works'),
+      choices: [{ label: t('coco.goodPoint'), goto: '' }]
     },
 
     why: {
-      text:
-        'Because they are free, they are everywhere, and they are the only thing here that is both food and a cup. ' +
-        'Show me a shell that does that. Shellman cannot, and I have asked him, at length, more than once.',
+      text: () => t('coco.why'),
       choices: [
-        { label: 'What are you building?', goto: 'building' },
-        { label: 'Fair enough', goto: '' }
+        { label: t('coco.whatBuilding'), goto: 'building' },
+        { label: t('coco.fairEnough'), goto: '' }
       ]
     },
 
     building: {
-      text: () =>
-        blenderIsBuilt()
-          ? 'Built it. Blades off a shipwreck, a jug out of a coconut, and a motor from the cave. ' +
-            'It sounds like a war and it makes a beautiful drink.'
-          : 'A blender. Three parts and I have got none of them: something to chop with, something to chop in! ' +
-            'Can you help me get them please.',
+      text: () => (blenderIsBuilt() ? t('coco.building.built') : t('coco.building.not')),
       choices: [
-        { label: 'Why coconuts?', goto: 'why' },
-        { label: 'Right', goto: '' }
+        { label: t('coco.whyCoconuts'), goto: 'why' },
+        { label: t('coco.right'), goto: '' }
       ]
     },
 
     tally: {
       text: () => {
         const total = coconutsTotal()
-        if (total === 0) return 'None. You have brought me none. I am not counting that against you yet.'
+        if (total === 0) return t('coco.tally.none')
         const left = Math.max(0, COCONUTS.forTheBall - total)
-        return left > 0
-          ? `${total}. ${left} short of the hundred, and the hundred is where the ball is.`
-          : `${total}. Past the hundred. You are now bringing me coconuts for the love of it, which I respect.`
+        return left > 0 ? t('coco.tally.short', { total, left }) : t('coco.tally.past', { total })
       },
       choices: [
-        { label: 'Why a hundred?', goto: 'why' },
-        { label: 'Thanks', goto: '' }
+        { label: t('coco.whyHundred'), goto: 'why' },
+        { label: t('coco.thanks'), goto: '' }
       ]
     }
   }

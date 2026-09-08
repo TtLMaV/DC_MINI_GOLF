@@ -3,6 +3,7 @@ import { giveDetector, hasDetector, scrapCarried } from './detector'
 import { Dialog, onPhone } from './npc'
 import { handScrap, scrapTotal } from './points'
 import { addQuests, questChoices, report } from './quests'
+import { t } from './strings'
 
 /**
  * What Cave Explorer Sally says.
@@ -27,19 +28,13 @@ export function sallyDialog(): Dialog {
 
   const greeting = () => {
     if (!hasDetector()) {
-      return (
-        'Finally, sign of life! You are the first person to come into the cave in months. ' +
-        'I need someone with a strong back and no strong opinions about digging.'
-      )
+      return t('sally.greet.noDetector')
     }
     const n = held()
     if (n === 0) {
-      return (
-        'Nothing on you. The floor here is full of it, sweep slowly and let the thing click. ' +
-        'People always walk too fast and then tell me the cave is empty.'
-      )
+      return t('sally.greet.none')
     }
-    return `${n} piece${n === 1 ? '' : 's'} on you. Hand it over and I will see what it wants to be.`
+    return t(n === 1 ? 'sally.greet.one' : 'sally.greet.many', { n })
   }
 
   const dialog: Dialog = {
@@ -50,58 +45,51 @@ export function sallyDialog(): Dialog {
 
         if (!hasDetector()) {
           options.push({
-            label: 'Take the detector',
+            label: t('sally.takeDetector'),
             goto: 'given',
             act: () => giveDetector()
           })
         } else if (held() > 0) {
           options.push({
-            label: `Hand over ${held()}`,
+            label: t('sally.handOver', { n: held() }),
             goto: 'handed',
             act: () => handScrap()
           })
         }
 
         options.push(...questChoices('sally'))
-        options.push({ label: 'What are you doing out here?', goto: 'why' })
-        options.push({ label: 'How does the detector work?', goto: 'howto' })
-        options.push({ label: 'I will let you get on', goto: '' })
+        options.push({ label: t('sally.whatDoing'), goto: 'why' })
+        options.push({ label: t('sally.howWorks'), goto: 'howto' })
+        options.push({ label: t('sally.letYouGetOn'), goto: '' })
         return options
       }
     },
 
     given: {
-      text:
-        'Sling it low and walk. Take good care of her, she is the best metal detector I have ever had. It clicks when there is metal within about fifteen metres. ' +
-        'Faster the tick the closer you are to the gold, or in this case, scrap!' +
-        (onPhone()
-          ? 'Tap the putter button and dig. Tap the + button to stow your detector when the clicking gets on your nerves, which it will.'
-          : 'Press E and dig. Press 3 to stow your detector when the clicking gets on your nerves, which it will.'),
+      // A function now. It was a fixed string, which is baked when the
+      // character is built, and a language chosen afterwards would never reach
+      // it.
+      text: () => t('sally.given') + t(onPhone() ? 'sally.givenPhone' : 'sally.givenKey'),
       choices: [
-        { label: 'What are you looking for?', goto: 'why' },
-        { label: 'Right', goto: '' }
+        { label: t('sally.whatLooking'), goto: 'why' },
+        { label: t('sally.right'), goto: '' }
       ]
     },
 
     handed: {
-      text: () =>
-        `That is the lot. ${scrapTotal()}  ` +
-        'Some of it is rubbish. Some of it is not, and telling the difference is the only thing I am good at.',
+      text: () => t('sally.handed', { total: scrapTotal() }),
       choices: [
-        { label: 'What have you worked out?', goto: 'why' },
-        { label: 'Back to it', goto: '' }
+        { label: t('sally.whatWorkedOut'), goto: 'why' },
+        { label: t('sally.backToIt'), goto: '' }
       ]
     },
 
     why: {
-      text:
-        'Three things, in order. Why a ship that size went down in water this calm and where did the ship go. ' +
-        'Where a full nine-hole golf course came from on an island with no port. ' +
-        'And how anybody gets off it, because in eleven months I have not seen one boat that was not already wrecked.',
+      text: () => t('sally.why'),
       choices: [
-        { label: 'Do you have any answers?', goto: 'answers' },
-        { label: 'How does the detector work?', goto: 'howto' },
-        { label: 'Grim', goto: '' }
+        { label: t('sally.anyAnswers'), goto: 'answers' },
+        { label: t('sally.howWorks'), goto: 'howto' },
+        { label: t('sally.grim'), goto: '' }
       ]
     },
 
@@ -110,25 +98,22 @@ export function sallyDialog(): Dialog {
       // something the player has not dug up yet.
       text: () => {
         const total = scrapTotal()
-        if (total === 0) return 'None whatsoever. That is rather the problem, and why you are holding a detector.'
-        if (total < 20) return 'I working on something special for you. The metal in the cave did not get bent by rocks, I will say that much.'
-        if (total < 50) return 'Enough to know the course and the ship are the same metal, which raises more questions than it settles.'
-        return 'More than I want. Ask me over a proper drink and I will tell you.'
+        if (total === 0) return t('sally.answers.none')
+        if (total < 20) return t('sally.answers.early')
+        if (total < 50) return t('sally.answers.some')
+        return t('sally.answers.most')
       },
       choices: [
-        { label: 'Anything I can do?', goto: 'start' },
-        { label: 'Fair enough', goto: '' }
+        { label: t('sally.anythingIcanDo'), goto: 'start' },
+        { label: t('sally.fairEnough'), goto: '' }
       ]
     },
 
     howto: {
-      text: () =>
-        `It reaches about ${DETECTOR.senseRange} metres and you can dig once you are within ${DETECTOR.digRange} of a thing. ` +
-        'Slow clicks mean something is out there, fast clicks mean it is under you. ' +
-        'It is weird, a dug spot fills back in after a while, the sea keeps putting things back, not sure why!',
+      text: () => t('sally.howto', { range: DETECTOR.senseRange, dig: DETECTOR.digRange }),
       choices: [
-        { label: 'What are you looking for?', goto: 'why' },
-        { label: 'Got it', goto: '' }
+        { label: t('sally.whatLooking'), goto: 'why' },
+        { label: t('sally.gotIt'), goto: '' }
       ]
     }
   }

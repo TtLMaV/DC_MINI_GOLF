@@ -9,9 +9,10 @@ import {
   VisibilityComponent
 } from '@dcl/sdk/ecs'
 import { Color3, Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
+import { t } from './strings'
 
 import { QUEST_BOARD } from './config'
-import { giverShortName, trackedQuests } from './quests'
+import { giverShortName, trackedQuests, questName } from './quests'
 
 /**
  * The quest board.
@@ -280,7 +281,7 @@ export function setupQuestBoard(): void {
   }
 
   heading = text(anchor, QUEST_BOARD.headingY, QUEST_BOARD.headingSize, GOLD)
-  TextShape.getMutable(heading).text = 'QUESTS'
+  TextShape.getMutable(heading).text = t('questboard.title')
 
   empty = text(anchor, QUEST_BOARD.headingY - QUEST_BOARD.rowHeight, QUEST_BOARD.detailSize, DIM)
 
@@ -322,7 +323,7 @@ export function updateQuestBoard(dt: number): void {
   show(empty, none)
   // Short on purpose. The old line was 56 characters, which at any size that
   // fits the parchment is too small to read from where you stand.
-  TextShape.getMutable(empty).text = none ? 'Nothing on. Ask around.' : ''
+  TextShape.getMutable(empty).text = none ? t('questboard.nothing') : ''
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
@@ -344,7 +345,7 @@ export function updateQuestBoard(dt: number): void {
     show(row.track, true)
     show(row.fill, true)
 
-    TextShape.getMutable(row.name).text = fit(quest.name, QUEST_BOARD.nameSize, QUEST_BOARD.width)
+    TextShape.getMutable(row.name).text = fit(questName(quest), QUEST_BOARD.nameSize, QUEST_BOARD.width)
     TextShape.getMutable(row.name).textColor = finished ? GOLD : CREAM
 
     // A finished quest says who to see, because at that point the number is no
@@ -354,7 +355,11 @@ export function updateQuestBoard(dt: number): void {
     // gets cut.
     const count = `  ${done}/${quest.target}`
     TextShape.getMutable(row.detail).text = finished
-      ? fit(`Completed — Speak to ${giverShortName(quest.giver)}`, QUEST_BOARD.detailSize, QUEST_BOARD.width)
+      ? fit(
+          t('questboard.readyToHandIn', { who: giverShortName(quest.giver) }),
+          QUEST_BOARD.detailSize,
+          QUEST_BOARD.width
+        )
       : fit(quest.objective, QUEST_BOARD.detailSize, QUEST_BOARD.width - count.length * PER_CHARACTER * QUEST_BOARD.detailSize) + count
 
     const fraction = Math.max(0, Math.min(1, done / Math.max(1, quest.target)))

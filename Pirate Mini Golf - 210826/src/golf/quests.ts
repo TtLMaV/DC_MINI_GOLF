@@ -1,4 +1,5 @@
 import { Dialog, DialogChoice } from './npc'
+import { t, tOr } from './strings'
 import { alreadyClaimed, claimOnce, playerStanding, reportQuestProgress, storedQuestProgress } from './points'
 import {
   COCONUTS,
@@ -753,37 +754,105 @@ export function claimQuest(id: string): void {
  * through here and no chance of the dialogue claiming a payment that did not
  * happen.
  */
+/**
+ * Whatever numbers a quest's own sentences need filling in.
+ *
+ * Nearly every quest wants its target and nothing else, so that is the default
+ * and the exception is written down rather than made general. The secret hole
+ * asks for a stroke count and a level, neither of which is its target, and
+ * inventing a field on Quest to carry two numbers for one quest would be a
+ * worse trade than this function.
+ */
+function questVars(quest: Quest): Record<string, string | number> {
+  return quest.id === 'secret-eight'
+    ? { n: SECRET_QUEST.strokes, level: FREE.secretLevel }
+    : { n: quest.target }
+}
+
+/**
+ * A quest's own writing, in the player's language.
+ *
+ * The English stays in QUESTS above, because that array is the definition of a
+ * quest and reads as one. tOr takes the other languages from the table and
+ * hands back the English when there is no row, so a quest nobody has
+ * translated still reads, and adding a language never touches this file.
+ *
+ * They are functions rather than fields for the reason everything else in here
+ * is: QUESTS is built once at start-up and the language can change afterwards.
+ */
+export function questName(quest: Quest): string {
+  return tOr(`quest.${quest.id}.name`, quest.name)
+}
+
+export function questObjective(quest: Quest): string {
+  return tOr(`quest.${quest.id}.objective`, quest.objective, questVars(quest))
+}
+
+export function questOffer(quest: Quest): string {
+  return tOr(`quest.${quest.id}.offer`, quest.offer, questVars(quest))
+}
+
+export function questAccepted(quest: Quest): string {
+  return tOr(`quest.${quest.id}.accepted`, quest.accepted, questVars(quest))
+}
+
+export function questDoneText(quest: Quest): string {
+  return tOr(`quest.${quest.id}.done`, quest.done, questVars(quest))
+}
+
+export function questAfterwards(quest: Quest): string {
+  return tOr(`quest.${quest.id}.afterwards`, quest.afterwards, questVars(quest))
+}
+
+/**
+ * How the giver describes where you are up to.
+ *
+ * `left` is worked out here rather than inside the sentence, because
+ * arithmetic written into a string only survives in the language it was
+ * written in. The nothing-yet case gets its own id where the English has its
+ * own branch, and falls through to the ordinary one where it does not.
+ */
+export function questProgressLine(quest: Quest, done: number): string {
+  const vars = { ...questVars(quest), done, target: quest.target, left: Math.max(0, quest.target - done) }
+  const english = quest.progress(done, quest.target)
+  if (done === 0) {
+    const none = tOr(`quest.${quest.id}.progress.none`, '', vars)
+    if (none) return none
+  }
+  return tOr(`quest.${quest.id}.progress`, english, vars)
+}
+
 export function questNode(quest: Quest, back: string) {
   return {
     text: () => {
       const s = stateOf(quest.id)
-      if (s.status === 'offered') return quest.offer
-      if (s.status === 'active') return quest.progress(s.done, quest.target)
-      if (s.status === 'complete') return quest.done
-      return quest.afterwards
+      if (s.status === 'offered') return questOffer(quest)
+      if (s.status === 'active') return questProgressLine(quest, s.done)
+      if (s.status === 'complete') return questDoneText(quest)
+      return questAfterwards(quest)
     },
     choices: (): DialogChoice[] => {
       const s = stateOf(quest.id)
 
       if (s.status === 'offered') {
         return [
-          { label: 'I will take it', goto: quest.id, act: () => acceptQuest(quest.id) },
-          { label: 'Not just now', goto: back }
+          { label: t('quest.take'), goto: quest.id, act: () => acceptQuest(quest.id) },
+          { label: t('quest.notNow'), goto: back }
         ]
       }
 
       if (s.status === 'complete') {
         return [
           {
-            label: `Collect ${quest.reward} ${POINTS.short}`,
+            label: t('quest.collect', { n: quest.reward, pp: POINTS.short }),
             goto: quest.id,
             act: () => claimQuest(quest.id)
           },
-          { label: 'In a minute', goto: back }
+          { label: t('quest.inAMinute'), goto: back }
         ]
       }
 
-      return [{ label: 'Right you are', goto: back }]
+      return [{ label: t('quest.rightYouAre'), goto: back }]
     }
   }
 }

@@ -2,7 +2,7 @@ import { isMobile } from '@dcl/sdk/platform'
 
 import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { Label, PositionUnit, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
-import { COCONUTS, COCONUTTY, POINTS, SALLY, SHELLMAN, SHOT, SWING, SHELLS } from './config'
+import { COCONUTS, COCONUTTY, POINTS, RULES, SALLY, SHELLMAN, SHOT, SWING, SHELLS } from './config'
 import { HOLES, SECRET, TOTAL_PAR } from './course'
 import { shellsCarried } from './shells'
 import { coconutsCarried } from './coconuts'
@@ -10,7 +10,8 @@ import { drinkIsUp, drinkLeft } from './drink'
 import { levelUpBanner } from './levelup'
 import { detectorHeat, detectorIsOut, detectorNearest, overFind, scrapCarried } from './detector'
 import { Game } from './game'
-import { setting, toggleSetting } from './settings'
+import { chooseLanguage, chosenLanguage, setting, toggleSetting } from './settings'
+import { LANGUAGES, isLang, t, tName } from './strings'
 import { myUserId, roster } from './net'
 import { choose, currentNode, nodeChoices, nodeText, speakerName } from './npc'
 import { balance, grantPoints, pointsAreLocal, pointsStatus, pointsVisible,
@@ -19,7 +20,16 @@ import { balance, grantPoints, pointsAreLocal, pointsStatus, pointsVisible,
   playerStanding,
   shellsToday
 } from './points'
-import { adminFinish, adminTake, allQuests, giverName, questById, questsByStatus } from './quests'
+import {
+  adminFinish,
+  adminTake,
+  allQuests,
+  giverName,
+  questById,
+  questName,
+  questObjective,
+  questsByStatus
+} from './quests'
 import {
   BAD,
   BORDER,
@@ -286,7 +296,7 @@ function levelChip() {
     >
       <UiEntity uiTransform={{ width: '100%', height: 30, flexDirection: 'row', alignItems: 'center' }}>
         <Label
-          value={loading ? '' : me.rank.name}
+          value={loading ? '' : tName('rank', me.rank.name)}
           fontSize={16}
           color={DIM}
           uiTransform={{ width: 116, height: 30 }}
@@ -360,7 +370,7 @@ function drinkChip() {
       uiBackground={panel()}
     >
       <Label
-        value="COLADA"
+        value={t('hud.colada')}
         fontSize={16}
         color={DIM}
         uiTransform={{ width: 82, height: 36 }}
@@ -419,7 +429,15 @@ function detectorChip() {
         */}
         <UiEntity uiTransform={{ width: 118, height: 30, flexDirection: 'row', alignItems: 'center' }}>
           <Label
-            value={on ? (onPhone() ? 'DIG' : 'DIG  (E)') : something ? 'SWEEPING' : 'NOTHING'}
+            value={
+              on
+                ? onPhone()
+                  ? t('hud.dig')
+                  : t('hud.digKey')
+                : something
+                  ? t('hud.sweeping')
+                  : t('hud.nothingFound')
+            }
             fontSize={15}
             color={on ? GOOD : DIM}
             uiTransform={{ width: on && onPhone() ? 40 : 118, height: 30 }}
@@ -776,12 +794,94 @@ function toggleRow(id: string, label: string, detail: string, on: boolean, flip:
         <Label value={detail} fontSize={14} color={DIM} uiTransform={{ width: 534, height: 20 }} textAlign="middle-left" />
       </UiEntity>
       <Label
-        value={on ? 'ON' : 'OFF'}
+        value={on ? t('settings.on') : t('settings.off')}
         fontSize={15}
         color={on ? GOOD : DIM}
         uiTransform={{ width: 130, height: 30 }}
         textAlign="middle-right"
       />
+    </UiEntity>
+  )
+}
+
+/**
+ * A setting with more than two answers, built like toggleRow so the panel
+ * still has one language for "a row you press to change something".
+ *
+ * The choices go where ON and OFF go, sharing that column between them. Two
+ * languages get half each, four get a quarter; past that they would be too
+ * narrow to read, and the answer then is a sub-panel rather than a smaller
+ * chip. The lit one is the one you are on.
+ */
+function choiceRow(
+  id: string,
+  label: string,
+  detail: string,
+  options: { code: string; name: string }[],
+  current: string,
+  pick: (code: string) => void
+) {
+  const gap = 8
+  const each = Math.floor((ACTION_W - gap * (options.length - 1)) / Math.max(1, options.length))
+
+  return (
+    <UiEntity
+      key={`choice-${id}`}
+      uiTransform={{
+        width: '100%',
+        height: LIST_ROW,
+        flexShrink: 0,
+        margin: { bottom: LIST_ROW_GAP },
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: { left: BORDER.button + 10, right: BORDER.button + 10 }
+      }}
+      uiBackground={button()}
+    >
+      <UiEntity
+        uiTransform={{ width: 664 - ACTION_W, height: 48, flexDirection: 'column', justifyContent: 'center' }}
+      >
+        <Label
+          value={label}
+          fontSize={19}
+          color={CREAM}
+          uiTransform={{ width: 664 - ACTION_W, height: 26 }}
+          textAlign="middle-left"
+        />
+        <Label
+          value={detail}
+          fontSize={14}
+          color={DIM}
+          uiTransform={{ width: 664 - ACTION_W, height: 20 }}
+          textAlign="middle-left"
+        />
+      </UiEntity>
+      <UiEntity
+        uiTransform={{ width: ACTION_W, height: 40, flexDirection: 'row', justifyContent: 'flex-end' }}
+      >
+        {options.map((o, i) => (
+          <UiEntity
+            key={`choice-${id}-${o.code}`}
+            uiTransform={{
+              width: each,
+              height: 22 + 2 * BORDER.chip,
+              margin: { left: i === 0 ? 0 : gap },
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            uiBackground={chip(o.code === current ? PICKED : undefined)}
+            onMouseDown={() => pick(o.code)}
+          >
+            <Label
+              value={o.name}
+              fontSize={15}
+              color={o.code === current ? GOLD : DIM}
+              uiTransform={{ width: each - 2 * BORDER.chip, height: 22 }}
+              textAlign="middle-center"
+            />
+          </UiEntity>
+        ))}
+      </UiEntity>
     </UiEntity>
   )
 }
@@ -920,22 +1020,22 @@ function carried() {
   return [
     {
       key: 'stash-shells',
-      name: 'Shells',
-      detail: `${SHELLMAN.name} wants them, down on the south beach.`,
-      right: shellsLeft > 0 ? `${shells}` : `${shells}  ·  limit reached today`,
+      name: t('stash.shells'),
+      detail: t('stash.shellsDetail', { who: SHELLMAN.name }),
+      right: shellsLeft > 0 ? `${shells}` : t('stash.limitReached', { n: shells }),
       held: shells
     },
     {
       key: 'stash-coconuts',
-      name: 'Coconuts',
-      detail: `${COCONUTTY.name} wants them, up by the palms.`,
-      right: coconutsLeft > 0 ? `${coconuts}` : `${coconuts}  ·  limit reached today`,
+      name: t('stash.coconuts'),
+      detail: t('stash.coconutsDetail', { who: COCONUTTY.name }),
+      right: coconutsLeft > 0 ? `${coconuts}` : t('stash.limitReached', { n: coconuts }),
       held: coconuts
     },
     {
       key: 'stash-scrap',
-      name: 'Scrap',
-      detail: `Dug up with the detector. ${SALLY.name} can use it.`,
+      name: t('stash.scrap'),
+      detail: t('stash.scrapDetail', { who: SALLY.name }),
       right: `${scrap}`,
       held: scrap
     }
@@ -979,25 +1079,41 @@ function hubPanel() {
       ? active.slice(0, maxQuestRows()).map(({ quest, done: got, status }) =>
           listRow(
             quest.id,
-            quest.name,
+            questName(quest),
             // A finished quest stops describing the job and starts describing
             // the errand. The objective is answered by then; who to go and see
             // is the only thing left, so it takes the wide line and the count
             // gives way to what collecting is worth.
             status === 'complete'
-              ? `Completed — Speak to ${giverName(quest.giver)}`
-              : quest.objective,
-            status === 'complete' ? `+${quest.reward} ${POINTS.short}` : `${got} / ${quest.target}`,
+              ? t('hub.readyToHandIn', { who: giverName(quest.giver) })
+              : questObjective(quest),
+            status === 'complete'
+              ? t('hub.reward', { n: quest.reward, pp: POINTS.short })
+              : t('hub.progress', { done: got, target: quest.target }),
             status === 'complete' ? GOOD : GOLD,
             status === 'complete' ? GOOD : CREAM
           )
         )
       : questTab === 'available'
         ? available.slice(0, maxQuestRows()).map((quest) =>
-            listRow(quest.id, quest.name, quest.objective, `Speak to ${giverName(quest.giver)}`, GOLD, CREAM)
+            listRow(
+              quest.id,
+              questName(quest),
+              questObjective(quest),
+              t('hub.speakTo', { who: giverName(quest.giver) }),
+              GOLD,
+              CREAM
+            )
           )
         : done.slice(0, maxQuestRows()).map((quest) =>
-            listRow(quest.id, quest.name, quest.objective, `+${quest.reward} ${POINTS.short}`, DIM, DIM)
+            listRow(
+              quest.id,
+              questName(quest),
+              questObjective(quest),
+              t('hub.reward', { n: quest.reward, pp: POINTS.short }),
+              DIM,
+              DIM
+            )
           )
 
   const shown =
@@ -1006,10 +1122,10 @@ function hubPanel() {
 
   const nothing =
     questTab === 'active'
-      ? 'Nothing on the go. Have a word with somebody.'
+      ? t('hub.nothingActive')
       : questTab === 'available'
-        ? 'Nothing on offer. Finish what you have started.'
-        : 'Nothing finished yet.'
+        ? t('hub.nothingAvailable')
+        : t('hub.nothingDone')
 
   // ---- gear --------------------------------------------------------------
   const kind = shopTab()
@@ -1021,17 +1137,28 @@ function hubPanel() {
 
   // ---- settings ----------------------------------------------------------
   const settingRows = [
+    // First, because it is the one that changes what every other row says.
+    choiceRow(
+      'language',
+      t('settings.language'),
+      t('settings.languageDetail'),
+      LANGUAGES,
+      chosenLanguage(),
+      (code) => {
+        if (isLang(code)) chooseLanguage(code)
+      }
+    ),
     toggleRow(
       'prompts',
-      'Hide prompts',
-      'Turns off the line at the bottom of the screen telling you what to do next.',
+      t('settings.hidePrompts'),
+      t('settings.hidePromptsDetail'),
       setting('hidePrompts'),
       () => toggleSetting('hidePrompts')
     ),
     toggleRow(
       'talk',
-      'Talk during rounds',
-      'Lets the characters stop you for a word mid-round. Never during a shot.',
+      t('settings.talkInRounds'),
+      t('settings.talkInRoundsDetail'),
       setting('talkInRounds'),
       () => toggleSetting('talkInRounds')
     )
@@ -1089,7 +1216,7 @@ function hubPanel() {
       >
         {/* title row */}
         <UiEntity uiTransform={{ width: '100%', height: TITLE_ROW_H, flexDirection: 'row', alignItems: 'center' }}>
-          <Bold value="HUB" fontSize={20} color={GOLD} outline={SHADOW} spread={1} width={titleW} height={30} textAlign="middle-left" />
+          <Bold value={t('hub.title')} fontSize={20} color={GOLD} outline={SHADOW} spread={1} width={titleW} height={30} textAlign="middle-left" />
           <Label
             value={hubTab === 'gear' ? `${purse}  ${POINTS.short}` : ''}
             fontSize={20}
@@ -1117,7 +1244,7 @@ function hubPanel() {
                 game.resetBall()
               }}
             >
-              <Bold value="RESET" fontSize={16} color={GOLD} outline={SHADOW} spread={1} width={92} height={26} />
+              <Bold value={t('hub.reset')} fontSize={16} color={GOLD} outline={SHADOW} spread={1} width={92} height={26} />
             </UiEntity>
           ) : null}
           {/*
@@ -1141,7 +1268,7 @@ function hubPanel() {
               }}
             >
               <Bold
-                value={leaveArmed ? 'SURE?' : 'LEAVE'}
+                value={leaveArmed ? t('hub.sure') : t('hub.leave')}
                 fontSize={16}
                 color={leaveArmed ? BAD : GOLD}
                 outline={SHADOW}
@@ -1167,37 +1294,35 @@ function hubPanel() {
               leaveArmed = false
             }}
           >
-            <Bold value="X" fontSize={19} color={GOLD} outline={SHADOW} spread={1} width={28} height={26} textAlign="middle-center" />
+            <Bold value={t('hub.close')} fontSize={19} color={GOLD} outline={SHADOW} spread={1} width={28} height={26} textAlign="middle-center" />
           </UiEntity>
         </UiEntity>
 
         {/* top tabs */}
         <UiEntity uiTransform={{ width: '100%', height: TAB_ROW_H, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-          {hubTabButton('quests', 'QUESTS', ready)}
-          {hubTabButton('gear', 'GEAR', 0)}
-          {hubTabButton('stash', 'STASH', 0)}
-          {hubTabButton('settings', 'SETTINGS', 0)}
+          {hubTabButton('quests', t('hub.quests'), ready)}
+          {hubTabButton('gear', t('hub.gear'), 0)}
+          {hubTabButton('stash', t('hub.stash'), 0)}
+          {hubTabButton('settings', t('hub.settings'), 0)}
         </UiEntity>
 
         {/* sub-tabs, which only two of the three want */}
         {hubTab === 'quests' ? (
           <UiEntity uiTransform={{ width: '100%', height: TAB_ROW_H, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-            {questTabButton('active', 'ACTIVE', active.length)}
-            {questTabButton('available', 'AVAILABLE', available.length)}
-            {questTabButton('done', 'COMPLETED', done.length)}
+            {questTabButton('active', t('hub.active'), active.length)}
+            {questTabButton('available', t('hub.available'), available.length)}
+            {questTabButton('done', t('hub.completed'), done.length)}
           </UiEntity>
         ) : hubTab === 'gear' ? (
           <UiEntity uiTransform={{ width: '100%', height: TAB_ROW_H, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-            {tabButton('club', 'CLUBS')}
-            {tabButton('ball', 'BALLS')}
+            {tabButton('club', t('hub.clubs'))}
+            {tabButton('ball', t('hub.balls'))}
           </UiEntity>
         ) : (
           <UiEntity uiTransform={{ width: '100%', height: 48, alignItems: 'center' }}>
             <Label
               value={
-                hubTab === 'settings'
-                  ? 'How the game looks to you. Nobody else is affected.'
-                  : 'What you are carrying. Hand it in to the person who wants it.'
+                hubTab === 'settings' ? t('hub.settingsHint') : t('hub.stashHint')
               }
               fontSize={15}
               color={DIM}
@@ -1231,7 +1356,7 @@ function hubPanel() {
         {/* footers */}
         {hubTab === 'quests' && hidden > 0 ? (
           <Label
-            value={`and ${hidden} more`}
+            value={t('hub.andMore', { n: hidden })}
             fontSize={15}
             color={DIM}
             uiTransform={{ width: '100%', height: 26 }}
@@ -1241,7 +1366,7 @@ function hubPanel() {
 
         {hubTab === 'gear' ? (
           <Label
-            value="Tap an owned club or ball to hold it. Salt sells the rest, at the crate in the shack."
+            value={t('hub.gearHint')}
             fontSize={15}
             color={DIM}
             uiTransform={{ width: '100%', height: 26 }}
@@ -1307,7 +1432,11 @@ function levelUp() {
         uiBackground={panel()}
       >
         <Bold
-          value={up.gained > 1 ? `LEVEL ${up.level}  (+${up.gained})` : `LEVEL ${up.level}`}
+          value={
+          up.gained > 1
+            ? t('level.titleGained', { n: up.level, gained: up.gained })
+            : t('level.title', { n: up.level })
+        }
           fontSize={44}
           color={GOLD}
           outline={SHADOW}
@@ -1326,7 +1455,7 @@ function levelUp() {
         />
         {up.bonus > 0 ? (
           <Label
-            value={`+${up.bonus} ${POINTS.short}`}
+            value={t('hub.reward', { n: up.bonus, pp: POINTS.short })}
             fontSize={22}
             color={GOOD}
             uiTransform={{ width: 692, height: 32 }}
@@ -1334,7 +1463,7 @@ function levelUp() {
           />
         ) : (
           <Label
-            value="Connect a wallet to be paid for these"
+            value={t('level.connectWallet')}
             fontSize={15}
             color={DIM}
             uiTransform={{ width: 692, height: 32 }}
@@ -1377,8 +1506,8 @@ const ACTION_CHARS = 34
 function lockedLabel(item: Item): string {
   if (item.unlock.kind === 'quest') {
     const quest = questById(item.unlock.quest)
-    if (!quest) return 'Quest reward'
-    const line = `Quest: ${quest.name}`
+    if (!quest) return t('shop.questReward')
+    const line = t('shop.questLocked', { name: questName(quest) })
     // Belt as well as braces: the column is sized for the longest quest in the
     // scene today, and this keeps it honest about the one written tomorrow.
     return line.length > ACTION_CHARS ? `${line.slice(0, ACTION_CHARS - 1)}\u2026` : line
@@ -1419,12 +1548,12 @@ function itemRow(item: Item, canAfford: boolean, canBuy: boolean = true, compact
   const action = !unlocked
     ? lockedLabel(item)
     : worn
-      ? 'EQUIPPED'
+      ? t('shop.equipped')
       : owned
-        ? 'EQUIP'
+        ? t('shop.equip')
         : canBuy
           ? `${item.price}`
-          : `${item.price}  ·  SALT`
+          : t('shop.atSalt', { price: item.price })
   const actionColour = !unlocked
     ? DIM
     : worn
@@ -1485,7 +1614,7 @@ function itemRow(item: Item, canAfford: boolean, canBuy: boolean = true, compact
         }}
       >
         <Label
-          value={item.name}
+          value={tName('item', item.name)}
           fontSize={compact ? 18 : 19}
           color={owned && unlocked ? CREAM : DIM}
           uiTransform={{ width: (compact ? 672 : 664) - ACTION_W, height: compact ? 22 : 26 }}
@@ -1493,7 +1622,7 @@ function itemRow(item: Item, canAfford: boolean, canBuy: boolean = true, compact
         />
         {compact ? null : (
           <Label
-            value={item.blurb}
+            value={tName('itemBlurb', item.name)}
             fontSize={14}
             color={DIM}
             uiTransform={{ width: 664 - ACTION_W, height: 20 }}
@@ -1569,8 +1698,8 @@ function inventory() {
 
         {/* tabs */}
         <UiEntity uiTransform={{ width: '100%', height: TAB_ROW_H, flexDirection: 'row', alignItems: 'center' }}>
-          {tabButton('ball', 'BALLS')}
-          {tabButton('club', 'CLUBS')}
+          {tabButton('ball', t('hub.balls'))}
+          {tabButton('club', t('hub.clubs'))}
         </UiEntity>
 
         {/*
@@ -1584,7 +1713,7 @@ function inventory() {
       </UiEntity>
 
       <Label
-        value="Walk away to close"
+        value={t('shop.walkAway')}
         fontSize={15}
         color={CREAM}
         uiTransform={{ width: 760, height: 24 }}
@@ -1857,7 +1986,7 @@ function dialog() {
         uiBackground={chip()}
       >
         <Label
-          value="Walk away to close"
+          value={t('shop.walkAway')}
           fontSize={15}
           color={CREAM}
           uiTransform={{ width: 300 - 2 * BORDER.chip, height: 22 }}
@@ -1956,18 +2085,16 @@ function prompt(phase: string, distanceToBall: number): string {
   if (setting('hidePrompts')) return ''
   if (detectorIsOut()) return ''
   if (phase === 'walking') {
-    return distanceToBall <= SHOT.promptRange ? 'Walk up to your ball' : ''
+    return distanceToBall <= SHOT.promptRange ? t('prompt.walkToBall') : ''
   }
   // {E} is a slot for the key, filled in at render: the letter on desktop,
   // the putter icon on a phone. It is a marker rather than two whole strings
   // so that the wording stays in one place and only the key moves.
   if (phase === 'ready') {
-    return onPhone() ? '{E}  to address the ball' : 'Press  E  to address the ball'
+    return onPhone() ? t('prompt.address') : t('prompt.addressKey')
   }
   if (phase === 'address') {
-    return onPhone()
-      ? 'Look where you want it to go,  then  {E}'
-      : 'Look where you want it to go,  then  E'
+    return onPhone() ? t('prompt.aim') : t('prompt.aimKey')
   }
   return ''
 }
@@ -2072,7 +2199,13 @@ function phoneMeter() {
       }}
     >
       <Label
-        value={sw.phase === 'power' ? 'SET POWER' : sw.phase === 'accuracy' ? 'HIT THE LINE' : ''}
+        value={
+          sw.phase === 'power'
+            ? t('meter.setPower')
+            : sw.phase === 'accuracy'
+              ? t('meter.hitLine')
+              : ''
+        }
         fontSize={17}
         color={sw.phase === 'accuracy' ? GOLD : CREAM}
         uiTransform={{ width: 320, height: 28 }}
@@ -2180,7 +2313,7 @@ function phoneMeter() {
             />
           </UiEntity>
           <Label
-            value={live ? 'the cross cancels' : ''}
+            value={live ? t('meter.crossCancels') : ''}
             fontSize={14}
             color={DIM}
             uiTransform={{ width: 240, height: 24 }}
@@ -2212,12 +2345,12 @@ function meter() {
   const confirm =
     sw.phase === 'power'
       ? onPhone()
-        ? 'to lock the power'
-        : 'Press  E  to lock the power'
+        ? t('meter.lockPower')
+        : t('meter.lockPowerKey')
       : sw.phase === 'accuracy'
         ? onPhone()
-          ? 'again on the white line'
-          : 'Press  E  on the white line'
+          ? t('meter.onLineAgain')
+          : t('meter.onLineKey')
         : ''
   const confirmW = Math.min(460, Math.max(90, confirm.length * 10))
   const fillTo = sw.phase === 'power' ? sw.power || sw.cursor : sw.power
@@ -2229,7 +2362,13 @@ function meter() {
     <UiEntity uiTransform={{ width: METER_W, height: 104, flexDirection: 'column', alignItems: 'center' }}>
       <UiEntity uiTransform={{ width: METER_W, height: 28, flexDirection: 'row' }}>
         <Label
-          value={sw.phase === 'power' ? 'SET POWER' : sw.phase === 'accuracy' ? 'HIT THE LINE' : ''}
+          value={
+          sw.phase === 'power'
+            ? t('meter.setPower')
+            : sw.phase === 'accuracy'
+              ? t('meter.hitLine')
+              : ''
+        }
           fontSize={18}
           color={sw.phase === 'accuracy' ? GOLD : CREAM}
           uiTransform={{ width: 400, height: 28 }}
@@ -2243,7 +2382,7 @@ function meter() {
           textAlign="middle-center"
         />
         <Label
-          value={live ? (onPhone() ? 'cross cancels' : 'F  cancel') : ''}
+          value={live ? (onPhone() ? t('meter.crossCancelsShort') : t('meter.fCancels')) : ''}
           fontSize={16}
           color={DIM}
           uiTransform={{ width: 300, height: 28 }}
@@ -2466,7 +2605,7 @@ function leaderboard(inTray = false) {
       uiBackground={panel()}
     >
       <Label
-        value={`PLAYING  ${field.length}`}
+        value={t('hud.playing', { n: field.length })}
         font="serif"
         fontSize={15}
         color={GOLD}
@@ -2604,7 +2743,7 @@ function adminQuestRows() {
           }}
           uiBackground={chip()}
         >
-          <Label value={quest.name} fontSize={14} color={colour} uiTransform={{ width: 232, height: 26 }} textAlign="middle-left" />
+          <Label value={questName(quest)} fontSize={14} color={colour} uiTransform={{ width: 232, height: 26 }} textAlign="middle-left" />
           <Label value={where} fontSize={13} color={DIM} uiTransform={{ width: 122, height: 26 }} textAlign="middle-center" />
           <UiEntity
             uiTransform={{ width: 130, height: 26, margin: { right: 6 }, alignItems: 'center', justifyContent: 'center' }}
@@ -2807,7 +2946,7 @@ function adminPanel() {
                   onMouseDown={() => game.gotoHole(i)}
                 >
                   <Label value={`${h.number}`} fontSize={18} color={here ? GOLD : CREAM} uiTransform={{ width: 44, height: 26 }} textAlign="middle-left" />
-                  <Label value={h.name} fontSize={17} color={here ? GOLD : CREAM} uiTransform={{ width: 350, height: 26 }} textAlign="middle-left" />
+                  <Label value={tName('hole', h.name)} fontSize={17} color={here ? GOLD : CREAM} uiTransform={{ width: 350, height: 26 }} textAlign="middle-left" />
                   <Label value={`par ${h.par}`} fontSize={15} color={DIM} uiTransform={{ width: 150, height: 26 }} textAlign="middle-center" />
                   <Label
                     value={score >= 0 ? `${score}` : '-'}
@@ -2861,7 +3000,7 @@ function adminPanel() {
                       onMouseDown={() => equip(item.id)}
                     >
                       <Label
-                        value={item.name}
+                        value={tName('item', item.name)}
                         fontSize={14}
                         color={worn ? GOLD : CREAM}
                         uiTransform={{ width: 290, height: 26 }}
@@ -2937,7 +3076,7 @@ function scorecard(inTray = false) {
             textAlign="middle-center"
           />
         ))}
-        <Label value="TOT" fontSize={13} color={DIM} uiTransform={{ width: 52, height: 22 }} textAlign="middle-center" />
+        <Label value={t('hud.total')} fontSize={13} color={DIM} uiTransform={{ width: 52, height: 22 }} textAlign="middle-center" />
       </UiEntity>
       <UiEntity uiTransform={{ width: '100%', height: 32, flexDirection: 'row' }}>
         {HOLES.map((h, i) => {
@@ -2962,7 +3101,7 @@ function scorecard(inTray = false) {
         <Label value={`${game.playedTotal}`} fontSize={18} color={CREAM} uiTransform={{ width: 52, height: 32 }} textAlign="middle-center" />
       </UiEntity>
       <Label
-        value={`Par ${TOTAL_PAR}    ${toPar(game.toPar)}`}
+        value={t('hud.parLine', { par: TOTAL_PAR, toPar: toPar(game.toPar) })}
         fontSize={14}
         color={game.toPar <= 0 ? GOOD : BAD}
         uiTransform={{ width: '100%', height: 22, margin: { top: 2 } }}
@@ -3098,15 +3237,15 @@ const hud = () => {
         uiBackground={panel()}
       >
         <Bold value={`${hole.number}`} fontSize={30} color={GOLD} outline={SHADOW} spread={2} width={34} height={40} textAlign="middle-left" />
-        <Bold value={hole.name} fontSize={20} color={CREAM} width={180} height={40} textAlign="middle-left" />
+        <Bold value={tName('hole', hole.name)} fontSize={20} color={CREAM} width={180} height={40} textAlign="middle-left" />
         <Label
-          value={`PAR ${hole.par}`}
+          value={t('hud.par', { n: hole.par })}
           fontSize={17}
           color={DIM}
           uiTransform={{ width: 90, height: 40 }}
           textAlign="middle-center"
         />
-        <Bold value={`${s.strokes}`} fontSize={30} color={s.strokes >= hole.par ? BAD : CREAM} outline={SHADOW} spread={2} width={46} height={40} textAlign="middle-right" />
+        <Bold value={`${s.strokes + 1}`} fontSize={30} color={s.strokes >= hole.par ? BAD : CREAM} outline={SHADOW} spread={2} width={46} height={40} textAlign="middle-right" />
         <Bold value={metres(s.distanceToPin)} fontSize={20} color={GOLD} width={84} height={40} textAlign="middle-right" />
       </UiEntity>
       {pointsChip()}
@@ -3145,14 +3284,20 @@ const hud = () => {
         }}
         uiBackground={panel()}
       >
-        <Bold value={s.freeHole === 'secret' ? 'SECRET' : 'PRACTICE'} fontSize={20} color={GOLD} outline={SHADOW} spread={1} width={120} height={40} textAlign="middle-left" />
+        <Bold value={s.freeHole === 'secret' ? t('hud.secret') : t('hud.practice')} fontSize={20} color={GOLD} outline={SHADOW} spread={1} width={120} height={40} textAlign="middle-left" />
         <Label
           value={
             s.freeHole === 'secret'
-              ? `Shot ${s.strokes + 1} of ${SECRET.maxStrokes}  ·  ${metres(s.distanceToPin)}`
+              ? t('hud.shotOf', {
+                  n: s.strokes + 1,
+                  // The hole may leave it off, in which case the rulebook's
+                  // number applies. The old template printed "undefined" here.
+                  max: SECRET.maxStrokes ?? RULES.maxStrokes,
+                  dist: metres(s.distanceToPin)
+                })
               : s.practicePutts > 0
-                ? `${s.practicePutts} holed  ·  shot ${s.strokes + 1}`
-                : `Shot ${s.strokes + 1}`
+                ? t('hud.holed', { n: s.practicePutts, shot: s.strokes + 1 })
+                : t('hud.shot', { n: s.strokes + 1 })
           }
           fontSize={17}
           color={CREAM}
@@ -3171,7 +3316,7 @@ const hud = () => {
           >
             {eIcon(24, { right: 6 })}
             <Label
-              value="to join"
+              value={t('hud.toJoin')}
               fontSize={17}
               color={GOLD}
               uiTransform={{ width: 62, height: 40 }}
@@ -3180,7 +3325,9 @@ const hud = () => {
           </UiEntity>
         ) : (
           <Label
-            value={s.toBoard <= 6 ? 'E  to join' : `Board ${metres(s.toBoard)}`}
+            value={
+              s.toBoard <= 6 ? t('hud.toJoinKey') : t('hud.boardAway', { dist: metres(s.toBoard) })
+            }
             fontSize={17}
             color={s.toBoard <= 6 ? GOLD : DIM}
             uiTransform={{ width: 110, height: 40 }}
@@ -3298,7 +3445,7 @@ const hud = () => {
             uiBackground={panel()}
           >
             <Label
-              value={`ROUND COMPLETE    ${game.playedTotal}  (${toPar(game.toPar)})`}
+              value={t('hud.roundComplete', { total: game.playedTotal, toPar: toPar(game.toPar) })}
               fontSize={26}
               color={GOLD}
               uiTransform={{ width: '100%', height: 42 }}
@@ -3315,10 +3462,10 @@ const hud = () => {
                 }}
               >
                 {eIcon(24, { right: 10 })}
-                <Label value="to play the course again" fontSize={17} color={CREAM} uiTransform={{ width: 240, height: 32 }} textAlign="middle-left" />
+                <Label value={t('hud.playAgain')} fontSize={17} color={CREAM} uiTransform={{ width: 240, height: 32 }} textAlign="middle-left" />
               </UiEntity>
             ) : (
-              <Label value="Press E to play the course again" fontSize={17} color={CREAM} uiTransform={{ width: '100%', height: 32 }} textAlign="middle-center" />
+              <Label value={t('hud.playAgainKey')} fontSize={17} color={CREAM} uiTransform={{ width: '100%', height: 32 }} textAlign="middle-center" />
             )}
           </UiEntity>
         </UiEntity>
