@@ -1381,6 +1381,48 @@
             "parent": 0
           }
         },
+        "577": {
+          "json": {
+            "position": {
+              "x": 19.25,
+              "y": 0,
+              "z": 49.25
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "578": {
+          "json": {
+            "position": {
+              "x": 38.75,
+              "y": 0.75,
+              "z": 53.75
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
         "66103": {
           "json": {
             "position": {
@@ -1400,6 +1442,27 @@
               "w": 0
             },
             "parent": 543
+          }
+        },
+        "66115": {
+          "json": {
+            "position": {
+              "x": 19.25,
+              "y": 0,
+              "z": 49.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
           }
         }
       }
@@ -1539,6 +1602,20 @@
                 "weight": -1,
                 "speed": 1,
                 "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "578": {
+          "json": {
+            "states": [
+              {
+                "clip": "Mesh.010Action",
+                "playing": true,
+                "weight": 1,
+                "speed": 1,
+                "loop": true,
                 "shouldReset": false
               }
             ]
@@ -2035,9 +2112,30 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "577": {
+          "json": {
+            "src": "assets/scene/Holes/Hole 5/Cannonballs.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "578": {
+          "json": {
+            "src": "assets/scene/Seagulls/Seagull.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "66103": {
           "json": {
             "src": "assets/scene/Waterfall/Vertical Waterfall.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "66115": {
+          "json": {
+            "src": "assets/scene/Coins/Coins Scattered.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -2372,9 +2470,24 @@
             "value": "logo.glb"
           }
         },
+        "577": {
+          "json": {
+            "value": "Cannonballs.glb"
+          }
+        },
+        "578": {
+          "json": {
+            "value": "Seagull.glb"
+          }
+        },
         "66103": {
           "json": {
             "value": "Vertical Waterfall.glb_2"
+          }
+        },
+        "66115": {
+          "json": {
+            "value": "Coins Scattered.glb"
           }
         }
       }
@@ -2475,7 +2588,10 @@
                   573,
                   574,
                   575,
-                  576
+                  576,
+                  577,
+                  578,
+                  66115
                 ]
               },
               {
@@ -2525,6 +2641,7 @@
               },
               {
                 "entity": 519,
+                "open": true,
                 "children": [
                   520,
                   521
@@ -2799,6 +2916,18 @@
               {
                 "entity": 576,
                 "children": []
+              },
+              {
+                "entity": 577,
+                "children": []
+              },
+              {
+                "entity": 578,
+                "children": []
+              },
+              {
+                "entity": 66115,
+                "children": []
               }
             ]
           }
@@ -3014,7 +3143,16 @@
         "576": {
           "json": {}
         },
+        "577": {
+          "json": {}
+        },
+        "578": {
+          "json": {}
+        },
         "66103": {
+          "json": {}
+        },
+        "66115": {
           "json": {}
         }
       }
@@ -3362,7 +3500,7 @@
         "0": {
           "json": {
             "name": "Pixel Pirate Mini Golf",
-            "description": "Empty Scene Template",
+            "description": "Pirate Mini Golf is a nine hole course laid over a pirate island. Par is 38. You open on The Jetty, a gentle dog-leg you play off the rail, and close on Treasure Run, a par 8 that crosses the whole island over two swinging bridges to a chest at the far end.\n\nThe course does not sit still. A barrel rolls the fairway on Barrel Run and has to be timed. On Ship's Passing a galleon ferries your ball across open water and you wait for your gap. Treasure Run has a lift that only bridges the shaft while it is down. Nothing here is on rails: every shot is simulated, so a ball that comes off a wall badly came off badly, and the course will not quietly put it back.",
             "thumbnail": "assets/images/Pixel_Pirate_Mini_Golf_-_Cover_Photo.png",
             "ageRating": "A",
             "categories": [

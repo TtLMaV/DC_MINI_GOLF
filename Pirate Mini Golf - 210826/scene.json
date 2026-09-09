@@ -3,7 +3,7 @@
   "runtimeVersion": "7",
   "display": {
     "title": "Pixel Pirate Mini Golf",
-    "description": "Empty Scene Template",
+    "description": "Pirate Mini Golf is a nine hole course laid over a pirate island. Par is 38. You open on The Jetty, a gentle dog-leg you play off the rail, and close on Treasure Run, a par 8 that crosses the whole island over two swinging bridges to a chest at the far end.\n\nThe course does not sit still. A barrel rolls the fairway on Barrel Run and has to be timed. On Ship's Passing a galleon ferries your ball across open water and you wait for your gap. Treasure Run has a lift that only bridges the shaft while it is down. Nothing here is on rails: every shot is simulated, so a ball that comes off a wall badly came off badly, and the course will not quietly put it back.",
     "favicon": "favicon_asset",
     "navmapThumbnail": "assets/images/Pixel_Pirate_Mini_Golf_-_Cover_Photo.png"
   },
