@@ -6,6 +6,8 @@
  */
 export enum EntityNames {
   Anchor_glb = "Anchor.glb",
+  Back_glb_2 = "Back.glb_2",
+  Back_glb_3 = "Back.glb_3",
   Barrel_glb = "Barrel.glb",
   Barrels_and_Crates_glb = "Barrels and Crates.glb",
   Blender_glb = "Blender.glb",
@@ -16,6 +18,7 @@ export enum EntityNames {
   Decking_glb = "Decking.glb",
   Door_Frame_glb = "Door Frame.glb",
   Environ = "Environ",
+  Floor_Guide_UI_glb = "Floor Guide UI.glb",
   Hole_1_Base_glb = "Hole 1 Base.glb",
   Hole_1_Flag_Pole_glb = "Hole 1 Flag Pole.glb",
   Hole_1_Trim_glb = "Hole 1 Trim.glb",
@@ -66,6 +69,8 @@ export enum EntityNames {
   Skeletons_glb = "Skeletons.glb",
   Table_glb = "Table.glb",
   Treasure_Chest_glb = "Treasure Chest.glb",
+  Tutorial_Desktop_glb = "Tutorial Desktop.glb",
+  Tutorial_Mobile_glb = "Tutorial Mobile.glb",
   Vertical_Waterfall_glb = "Vertical Waterfall.glb",
   Vertical_Waterfall_glb_2 = "Vertical Waterfall.glb_2",
   Wheel_glb = "Wheel.glb",

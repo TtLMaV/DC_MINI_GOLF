@@ -1,4 +1,5 @@
 import { isMobile } from '@dcl/sdk/platform'
+import { UiCanvasInformation, engine } from '@dcl/sdk/ecs'
 
 import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { Label, PositionUnit, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
@@ -655,7 +656,7 @@ function hubButton() {
  * people not to press buttons.
  */
 function cardsButton() {
-  if (!onPhone()) return null
+  if (!cornerHidden()) return null
   if (!hasCards()) return null
 
   return (
@@ -2537,6 +2538,85 @@ const PHONE_COLUMN_GAP = 20
  * each other.
  */
 const TRAY_W = 452
+
+/**
+ * Whether the corner panels can sit beside the strip, and what to do when they
+ * cannot.
+ *
+ * The strip is centred and the scorecard and standings are pinned top right, so
+ * the two close on each other as the strip grows. Adding it up in the units it
+ * is laid out in: the hole panel is 520, points and rank another 434, the bag
+ * 98, and the drink and detector 464 more when they are out. That is 1052 on a
+ * quiet strip and 1516 on a busy one. The corner wants 452 of panel plus its
+ * margins on top of half the strip, so it needs a canvas 2004 wide at the quiet
+ * end and 2468 at the busy one. A 16:9 screen gives 1920. They overlap, which
+ * is the bag sitting on top of the scorecard.
+ *
+ * Measured rather than assumed. UiCanvasInformation is the renderer telling the
+ * scene its real canvas, and because the UI is authored 1920 x 1080 and scaled
+ * to fit, the width it actually gets is the aspect taken at 1080 tall, and
+ * never less than the 1920 it was drawn for.
+ */
+const CORNER_GAP = 16
+
+/**
+ * What to do about it.
+ *
+ *   'drop'  the corner keeps its panels and moves below the strip. Nothing is
+ *           hidden, which suits a desktop, where the height is going spare.
+ *   'tray'  the corner goes away and the phone's button appears instead, so
+ *           the scorecard and standings live behind it on both platforms.
+ */
+const CROWDED: 'drop' | 'tray' = 'drop'
+
+/** The design-space width the scene actually has, not the one it assumes. */
+function canvasDesignWidth(): number {
+  const info = UiCanvasInformation.getOrNull(engine.RootEntity)
+  if (!info || info.width <= 0 || info.height <= 0) return 1920
+  return Math.max(1920, (info.width / info.height) * 1080)
+}
+
+/** What the strip adds up to, counted the same way it is laid out. */
+function stripWidth(): number {
+  const gap = chipGap()
+  let w = 520
+  if (pointsVisible()) w += 178 + gap + 236 + gap
+  w += STRIP_H + gap
+  // Counted whether or not it is drawn. Asking would mean asking whether the
+  // corner fits, and that is the number being worked out here.
+  if (onPhone() || CROWDED === 'tray') w += STRIP_H + gap
+  if (drinkIsUp()) w += 212 + gap
+  if (detectorIsOut()) w += 232 + gap
+  return w
+}
+
+let cornerSaid = false
+
+function cornerFits(): boolean {
+  if (onPhone()) return false
+  const room = canvasDesignWidth()
+  const fits = stripWidth() / 2 + CORNER_GAP + TRAY_W + SAFE.edge <= room / 2
+  if (!cornerSaid) {
+    cornerSaid = true
+    console.log(
+      `[golf] canvas ${Math.round(room)} wide, strip ${stripWidth()}, ` +
+        `corner ${fits ? 'fits beside it' : `does not fit, going to '${CROWDED}'`}`
+    )
+  }
+  return fits
+}
+
+/** True when the corner panels are not drawn in the corner at all. */
+function cornerHidden(): boolean {
+  return onPhone() || (CROWDED === 'tray' && !cornerFits())
+}
+
+/** Top of the right-hand column: the corner, or under the strip when crowded. */
+function cornerTop(): number {
+  if (cornerFits()) return SAFE.edge
+  const rows = stripWidth() > canvasDesignWidth() ? 2 : 1
+  return edgeGap() + rows * STRIP_H + (rows > 1 ? 12 : 0) + CORNER_GAP
+}
 const TRAY_TOP = () => edgeGap() + STRIP_H + PHONE_COLUMN_GAP
 
 /**
@@ -2595,7 +2675,9 @@ function leaderboard(inTray = false) {
     <UiEntity
       uiTransform={{
         positionType: inTray ? 'relative' : 'absolute',
-        position: inTray ? undefined : { top: 138, right: SAFE.edge },
+        // 114 under the scorecard, which is where it has always sat relative
+        // to it. Following cornerTop() means the pair move together.
+        position: inTray ? undefined : { top: cornerTop() + 114, right: SAFE.edge },
         width: inTray ? TRAY_W : 372,
         // The title and its gap, the rows, and the frame's 24 top and bottom.
         height: 24 + 2 * BORDER.panel + rows * rowH(),
@@ -3056,7 +3138,7 @@ function scorecard(inTray = false) {
     <UiEntity
       uiTransform={{
         positionType: inTray ? 'relative' : 'absolute',
-        position: inTray ? undefined : { top: SAFE.edge, right: SAFE.edge },
+        position: inTray ? undefined : { top: cornerTop(), right: SAFE.edge },
         width: TRAY_W,
         height: PHONE_CARD_H,
         margin: inTray ? { bottom: PHONE_COLUMN_GAP } : undefined,
@@ -3124,7 +3206,7 @@ function scorecard(inTray = false) {
  * strip and takes the only way of closing the tray with it.
  */
 function cardsTray() {
-  if (!onPhone()) return null
+  if (!cornerHidden()) return null
   if (!hasCards()) {
     cardsOpen = false
     return null
@@ -3345,8 +3427,8 @@ const hud = () => {
       ) : null}
 
       {/* ---- scorecard and standings: corner on a desktop, tray on a phone ---- */}
-      {onPhone() ? null : scorecard()}
-      {onPhone() ? null : leaderboard()}
+      {cornerHidden() ? null : scorecard()}
+      {cornerHidden() ? null : leaderboard()}
       {cardsTray()}
 
       {/* ---- callout ---- */}

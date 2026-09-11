@@ -1423,6 +1423,69 @@
             "parent": 0
           }
         },
+        "580": {
+          "json": {
+            "position": {
+              "x": 19.25,
+              "y": 0,
+              "z": 49.25
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "582": {
+          "json": {
+            "position": {
+              "x": 25.365236282348633,
+              "y": 0,
+              "z": 49.25
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "585": {
+          "json": {
+            "position": {
+              "x": 25.4570255279541,
+              "y": -0.07803815603256226,
+              "z": 49.47064208984375
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
         "66103": {
           "json": {
             "position": {
@@ -1451,16 +1514,58 @@
               "y": 0,
               "z": 49.25
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
             },
+            "parent": 0
+          }
+        },
+        "66119": {
+          "json": {
+            "position": {
+              "x": 19.25,
+              "y": 0,
+              "z": 49.5
+            },
             "scale": {
               "x": 1,
               "y": 1,
               "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "66120": {
+          "json": {
+            "position": {
+              "x": -39.75,
+              "y": 0,
+              "z": 49.25
+            },
+            "scale": {
+              "x": -1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
             },
             "parent": 0
           }
@@ -2126,6 +2231,27 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "580": {
+          "json": {
+            "src": "assets/scene/ui/Floor Guide UI.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "582": {
+          "json": {
+            "src": "assets/scene/Shack/Tutorial Desktop.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "585": {
+          "json": {
+            "src": "assets/scene/Shack/Back.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "66103": {
           "json": {
             "src": "assets/scene/Waterfall/Vertical Waterfall.glb",
@@ -2136,6 +2262,20 @@
         "66115": {
           "json": {
             "src": "assets/scene/Coins/Coins Scattered.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "66119": {
+          "json": {
+            "src": "assets/scene/Shack/Back.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "66120": {
+          "json": {
+            "src": "assets/scene/Shack/Tutorial Mobile.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -2480,6 +2620,21 @@
             "value": "Seagull.glb"
           }
         },
+        "580": {
+          "json": {
+            "value": "Floor Guide UI.glb"
+          }
+        },
+        "582": {
+          "json": {
+            "value": "Tutorial Desktop.glb"
+          }
+        },
+        "585": {
+          "json": {
+            "value": "Back.glb_2"
+          }
+        },
         "66103": {
           "json": {
             "value": "Vertical Waterfall.glb_2"
@@ -2488,6 +2643,16 @@
         "66115": {
           "json": {
             "value": "Coins Scattered.glb"
+          }
+        },
+        "66119": {
+          "json": {
+            "value": "Back.glb_3"
+          }
+        },
+        "66120": {
+          "json": {
+            "value": "Tutorial Mobile.glb"
           }
         }
       }
@@ -2591,7 +2756,12 @@
                   576,
                   577,
                   578,
-                  66115
+                  66115,
+                  580,
+                  582,
+                  585,
+                  66119,
+                  66120
                 ]
               },
               {
@@ -2709,6 +2879,7 @@
               },
               {
                 "entity": 533,
+                "open": true,
                 "children": [
                   534,
                   535,
@@ -2927,6 +3098,26 @@
               },
               {
                 "entity": 66115,
+                "children": []
+              },
+              {
+                "entity": 580,
+                "children": []
+              },
+              {
+                "entity": 582,
+                "children": []
+              },
+              {
+                "entity": 585,
+                "children": []
+              },
+              {
+                "entity": 66120,
+                "children": []
+              },
+              {
+                "entity": 66119,
                 "children": []
               }
             ]
@@ -3149,10 +3340,28 @@
         "578": {
           "json": {}
         },
+        "580": {
+          "json": {}
+        },
+        "581": {
+          "json": {}
+        },
+        "582": {
+          "json": {}
+        },
+        "585": {
+          "json": {}
+        },
         "66103": {
           "json": {}
         },
         "66115": {
+          "json": {}
+        },
+        "66119": {
+          "json": {}
+        },
+        "66120": {
           "json": {}
         }
       }
